@@ -15,9 +15,10 @@
 |---|---|
 | 🔍 **OCR Resource** | Membaca Gold, Elixir, Dark Elixir secara real-time via Tesseract |
 | ⏭️ **Auto Next** | Klik tombol Next otomatis via template matching + fallback deteksi warna oranye |
-| 🎯 **Air Defense Detection** | Deteksi posisi Air Defense musuh otomatis via `AD_template.png` |
-| ⚡ **Spell Petir Otomatis** | Jatuhkan Lightning Spell ke setiap Air Defense sebelum menyerang |
-| 🐉 **Deploy 1 Arah** | Semua pasukan diturunkan dari satu titik/satu sisi (bukan melingkar) |
+| 🎯 **Filter Loot** | Serang kalau Gold **atau** Elixir ≥ `Config.TARGETS` (default 400k); Dark diabaikan |
+| ⚡ **Spell Petir Otomatis** | 11 Lightning Spell disebar ke `Config.LIGHTNING_SPOTS` (kuadran core base) |
+| 🦸 **Ulti Hero** | Kartu hero ditap ulang +30 s & +62 s setelah deploy (ability 2x untuk BK/AQ) |
+| 🐉 **Deploy 1 Arah** | Semua pasukan diturunkan dari satu titik/sisi (`Config.DEPLOY_POINT`), langsung setelah base dinilai |
 | 🏠 **Post-Battle Handler** | Otomatis kembali ke layar pencarian setelah battle selesai |
 | 🖥️ **Multi-Monitor** | Mendukung emulator di monitor utama maupun monitor kedua |
 | 🔧 **Mode Kalibrasi** | Jalankan `--calibrate` untuk menghasilkan overlay visual semua koordinat |

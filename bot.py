@@ -49,7 +49,9 @@ class Config:
         "Dark":   (1560, 185, 1836, 228),
     }
     OCR_SMAX, OCR_VMIN = 70, 215
-    TARGETS = {"Gold": 800_000, "Elixir": 800_000}   # Dark tidak difilter
+    # filter base: cukup salah satu (gold ATAU elixir) supaya cepat dapat target
+    TARGETS = {"Gold": 400_000, "Elixir": 400_000}   # Dark tidak difilter
+    ANY_TARGET = True            # True: gold/elixir salah satu lolos = serang
 
     # --- template state (1080p) ---
     TPL = {
@@ -90,7 +92,8 @@ class Config:
     ABILITY_DELAYS = (30, 62)       # detik setelah deploy; ronde 2 utk BK/AQ (2x pakai)
     # kuadran core base (base selalu kira-kira di tengah layar saat scout)
     LIGHTNING_SPOTS = [(780, 390), (1090, 390), (780, 650), (1090, 650)]
-    BASE_ROI = (260, 130, 1600, 870)  # area base saat scout (tanpa UI)    DEPLOY_POINT = (140, 520)       # rumput tepi pantai (100% di luar batas base manapun)
+    BASE_ROI = (260, 130, 1600, 870)  # area base saat scout (tanpa UI)
+    DEPLOY_POINT = (140, 520)       # rumput tepi pantai (100% di luar batas base manapun)
     DEPLOY_SPREAD = (20, 45)
 
     # deteksi tombol End Battle: blob merah kiri-bawah (UI baru tidak punya Next)
@@ -255,7 +258,8 @@ def detect_state(img):
 
 def loot_enough(loot):
     """Hanya Gold & Elixir yang difilter; Dark diabaikan total."""
-    return all((loot.get(k) or 0) >= t for k, t in Config.TARGETS.items())
+    vals = [(loot.get(k) or 0) >= t for k, t in Config.TARGETS.items()]
+    return any(vals) if Config.ANY_TARGET else all(vals)
 
 
 # ============================================================
@@ -454,7 +458,9 @@ def selftest():
         assert got == state, f"{state}: dapat {got}"
         print(f"{state:6s} ok")
     assert loot_enough({"Gold": 10**6, "Elixir": 10**6, "Dark": 10**4})
-    assert not loot_enough({"Gold": 0, "Elixir": 10**6, "Dark": 10**4})
+    assert loot_enough({"Gold": 0, "Elixir": 10**6, "Dark": 10**4}) == Config.ANY_TARGET
+    assert not loot_enough({"Gold": 1, "Elixir": 2, "Dark": 10**4})
+    assert not loot_enough({"Gold": None, "Elixir": None, "Dark": None})
     print("loot gate ok")
 
 
