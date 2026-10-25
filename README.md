@@ -1,270 +1,214 @@
-# 🤖 Clash of Clans Farming Bot (Computer Vision)
+# CoC Bot — ADB + OCR
 
-> Bot otomatisasi farming Clash of Clans berbasis **Computer Vision** — tanpa ADB, tanpa root, bekerja di emulator apa pun.
+> Bot farming Clash of Clans otomatis untuk emulator: screenshot lewat ADB, baca
+> loot lewat Tesseract OCR, tap lewat `input touchscreen tap`. Tanpa mod, tanpa
+> memory reading, tanpa root.
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)
 ![OpenCV](https://img.shields.io/badge/OpenCV-4.x-green?logo=opencv)
-![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey?logo=windows)
-![License](https://img.shields.io/badge/License-MIT-yellow)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%2B%20LDPlayer-lightgrey?logo=windows)
 
 ---
 
-## 📌 Fitur Utama
+## Alur kerja
 
-| Fitur | Keterangan |
+```
+HOME --tap Battle--> MENU --tap Find a Match--> ARMY --tap Attack!--> SCOUT
+                                                                        |
+                          +---------------------------------------------+
+                          |
+                   loot cukup? --tidak--> tap Next --> SCOUT (base lain)
+                          |
+                         ya
+                          |
+              deploy pasukan (6 slot, satu titik)
+                          |
+              battle jalan? tidak -> deploy ulang 3 dtk
+                          |
+              11 Lightning Spell ke 4 kuadran core
+                          |
+              ulti hero: +30 dtk, +62 dtk (cek battle masih jalan)
+                          |
+              tunggu battle selesai --> HOME
+```
+
+`UNKNOWN` (layar hasil battle / transisi matchmaking) butuh **2 frame
+berturut-turut** sebelum bot tap "Return Home". Satu frame transisi saja tidak
+cukup: tap buta di layar transisi mendarat di bar pasukan dan malah memilih
+kartu.
+
+---
+
+## Filter loot
+
+Panel "Available Loot" dibaca OCR dengan format ribuan CoC — `1 000 000`,
+`100 000`, `10 000`, `1000`. Spasi di dalam angka digabung otomatis sebelum
+di-parse, jadi `1 000 000` tetap terbaca 1000000.
+
+```python
+TARGETS = {"Gold": 400_000, "Elixir": 400_000}   # Dark tidak difilter
+ANY_TARGET = True    # gold ATAU elixir lolos = serang
+```
+
+| Setelan | Perilaku |
 |---|---|
-| 🔍 **OCR Resource** | Membaca Gold, Elixir, Dark Elixir secara real-time via Tesseract |
-| ⏭️ **Auto Next** | Klik tombol Next otomatis via template matching + fallback deteksi warna oranye |
-| 🎯 **Filter Loot** | Serang kalau Gold **atau** Elixir ≥ `Config.TARGETS` (default 400k); Dark diabaikan |
-| ⚡ **Spell Petir Otomatis** | 11 Lightning Spell disebar ke `Config.LIGHTNING_SPOTS` (kuadran core base) |
-| 🦸 **Ulti Hero** | Kartu hero ditap ulang +30 s & +62 s setelah deploy (ability 2x untuk BK/AQ) |
-| 🐉 **Deploy 1 Arah** | Semua pasukan diturunkan dari satu titik/sisi (`Config.DEPLOY_POINT`), langsung setelah base dinilai |
-| 🏠 **Post-Battle Handler** | Otomatis kembali ke layar pencarian setelah battle selesai |
-| 🖥️ **Multi-Monitor** | Mendukung emulator di monitor utama maupun monitor kedua |
-| 🔧 **Mode Kalibrasi** | Jalankan `--calibrate` untuk menghasilkan overlay visual semua koordinat |
+| `ANY_TARGET = True` | cukup salah satu lolos → lebih cepat dapat lawan |
+| `ANY_TARGET = False` | gold **dan** elixir harus lolos |
+| Dark Elixir | selalu diabaikan |
+
+Tidak lolos → tap `Next`, lanjut base berikutnya tanpa balik ke home.
 
 ---
 
-## ⚙️ Teknologi
+## Deploy
 
-- **[OpenCV](https://opencv.org/)** — Template matching tombol & deteksi Air Defense
-- **[Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki)** — Membaca angka Gold/Elixir/Dark dari layar
-- **[mss](https://python-mss.readthedocs.io/)** — Screen capture ultra-ringan (multi-monitor)
-- **[PyAutoGUI](https://pyautogui.readthedocs.io/)** — Klik & kontrol mouse otomatis
-- **Tanpa ADB** — Agnostik terhadap jenis emulator (LDPlayer, BlueStacks, MuMu, dll.)
+Semua pasukan diturunkan ke satu titik di rumput tepi pantai
+(`DEPLOY_POINT = (140, 520)`), bukan melingkar, urut sesuai `DEPLOY_ORDER`:
+
+| # | Unit | Tap |
+|---|------|-----|
+| 1 | Electro Dragon | 10 |
+| 2 | Wall Wrecker | 1 |
+| 3 | Barbarian King | 1 |
+| 4 | Archer Queen | 1 |
+| 5 | Grand Warden | 1 |
+| 6 | Royal Champion | 1 |
+
+Tap titik deploy diberi jitter ±20/±45 px (`DEPLOY_SPREAD`) supaya unit
+menyebar, bukan menumpuk di satu pixel.
+
+Kalau loot sudah lolos, bot **tidak menunggu** countdown "Battle starts in"
+selesai — deploy langsung. Kalau ternyata ditolak (CoC belum masuk fase
+battle), bot cek `battle_running()` lalu deploy sekali lagi setelah 3 detik.
 
 ---
 
-## 🚀 Instalasi
+## Petir
 
-### 1. Clone Repository
+11 Lightning Spell dipakai **habis** per serangan: tap slot spell, lalu sebar
+bergiliran ke 4 titik kuadran core (`LIGHTNING_SPOTS`), jitter ±15 px, jeda
+0.18 dtk.
+
+Deteksi Air Defense otomatis sudah dibuang — `templates/AD_template.png` tidak
+pernah match di atas 0.46 (selalu false positive), hasilnya lebih buruk
+daripada titik core tetap.
+
+---
+
+## Ulti hero
+
+Tap kartu hero = ability (UI CoC mobile baru tidak punya tombol ability
+terpisah). Jadwal dihitung dari akhir deploy:
+
+```python
+ABILITY_DELAYS = (30, 62)   # ronde 1 di +30 dtk, ronde 2 di +62 dtk
+```
+
+Kalau diklik langsung setelah deploy, hero masih jalan ke base dan ability
+terbuang. Tiap ronde diawali cek `battle_running()`: kalau battle keburu
+selesai, ulti dihentikan — tidak ada tap nyasar di layar hasil. Ronde 2 untuk
+BK/AQ yang ability-nya bisa 2x.
+
+---
+
+## Instalasi
+
+1. **Python 3.10** + dependensi:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. **Tesseract OCR** di `C:\Program Files\Tesseract-OCR\tesseract.exe`
+   (path di-set di `bot.py` baris 25).
+3. **LDPlayer 14** dengan ADB di `C:\LDPlayer\LDPlayer14\adb.exe`, CoC sudah
+   login, resolusi **1920x1080** (bot memaksa `wm size` sendiri saat start).
+4. Cek device terdeteksi:
+   ```bash
+   adb devices    # emulator-5554  device
+   ```
+
+---
+
+## Menjalankan
 
 ```bash
-git clone https://github.com/username/bot_coc.git
-cd bot_coc
+python bot.py               # loop utama (serang terus sampai dihentikan)
+python bot.py --state       # baca state + loot sekali, read-only
+python bot.py --calibrate   # simpan debug/calibrate.png beranotasi
+python bot.py --selftest    # cek vision tanpa device
 ```
 
-### 2. Install Tesseract OCR
+`--state` dan `--calibrate` tidak menekan tombol apa pun, jadi aman dijalankan
+saat bot sedang jalan. Kalau bot dinyalakan ketika battle masih berlangsung
+(deteksi `battle_running`), bot menunggu battle itu selesai dulu, tidak tap
+`Next` di tengah pertempuran.
 
-Download dan install dari:
-👉 https://github.com/UB-Mannheim/tesseract/wiki
-
-Pastikan path instalasi sesuai dengan yang ada di `bot.py`:
-```python
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-```
-
-### 3. Install Dependensi Python
-
-```bash
-pip install -r requirements.txt
-```
-
-**Isi `requirements.txt`:**
-```
-opencv-python
-numpy
-mss
-pytesseract
-pyautogui
-```
-
----
-
-## 🗂️ Struktur Project
-
-```
-bot_coc/
-├── bot.py                  # File utama bot
-├── requirements.txt        # Dependensi Python
-├── README.md
-└── templates/
-    ├── next_btn.png        # Template tombol Next (wajib ada)
-    ├── attack_btn.png      # Template tombol Attack (opsional)
-    └── AD_template.png     # Template Air Defense untuk deteksi otomatis
-```
-
----
-
-## 🖼️ Menyiapkan Template
-
-Template adalah crop kecil gambar UI yang digunakan untuk pencocokan (`matchTemplate`).
-
-| File | Cara Membuat |
-|---|---|
-| `next_btn.png` | Screenshot tombol **Next** di layar pencarian lawan, crop rapat |
-| `attack_btn.png` | Screenshot tombol **Attack/Find Match** |
-| `AD_template.png` | Screenshot bangunan **Air Defense** milik musuh, crop rapat tanpa background |
-
-> ⚠️ Simpan semua file template ke dalam folder `templates/`
-
----
-
-## ⚡ Cara Pakai
-
-### Mode Kalibrasi (jalankan dulu sebelum bot)
-
-```bash
-python bot.py --calibrate
-```
-
-Akan menghasilkan dua file:
-- `calibrate_full.png` — Screenshot penuh area game
-- `calibrate_overlay.png` — Visualisasi semua koordinat yang dikonfigurasi (region OCR, titik serangan, slot pasukan, Air Defense)
-
-Buka `calibrate_overlay.png` dan sesuaikan koordinat di bagian `Config` pada `bot.py`.
-
-### Jalankan Bot
-
-```bash
-python bot.py
-```
-
-Bot akan otomatis:
-1. Scan loot base musuh via OCR
-2. Jika loot belum cukup → klik Next
-3. Jika loot mencukupi target → mulai serang:
-   - **Fase 1:** Deteksi Air Defense → jatuhkan Spell Petir
-   - **Fase 2:** Deploy semua pasukan dan hero dari satu sisi
-4. Tunggu battle selesai (180 detik)
-5. Tekan ESC untuk kembali ke layar pencarian
-6. Ulangi dari awal
-
----
-
-## 🛠️ Konfigurasi
-
-Semua pengaturan ada di class `Config` di dalam `bot.py`.
-
-### Target Loot
-
-```python
-TARGET_GOLD   = 500000   # Minimum Gold
-TARGET_ELIXIR = 500000   # Minimum Elixir
-TARGET_DARK   = 5000     # Minimum Dark Elixir
-```
-
-### Monitor & Emulator
-
-```python
-MONITOR_INDEX    = 1    # 1 = monitor utama, 2 = monitor kedua
-EMULATOR_OFFSET_X = 0  # Jika emulator tidak fullscreen, isi offset X
-EMULATOR_OFFSET_Y = 0  # Offset Y
-GAME_WIDTH  = 1850      # Lebar area game
-GAME_HEIGHT = 1020      # Tinggi area game
-```
-
-### Slot Pasukan
-
-```python
-SLOT_NAMES = [
-    "Naga Petir",     # Slot 0
-    "Naga Api",       # Slot 1
-    "Wall Wrecker",   # Slot 2
-    "Barbarian King", # Slot 3
-    "Archer Queen",   # Slot 4
-    "Grand Warden",   # Slot 5
-    "Royal Champion", # Slot 6
-    "Spell Petir",    # Slot 7
-]
-```
-
-### Jumlah Deploy Per Slot
-
-```python
-TROOP_DEPLOY_COUNT = {
-    0: 8,   # Naga Petir  → 8 titik
-    1: 8,   # Naga Api    → 8 titik
-    2: 1,   # Wall Wrecker → 1 titik (siege machine)
-    3: 1,   # Hero         → 1 titik
-    ...
-}
-```
-
-### Titik Serangan (1 Arah)
-
-```python
-ATTACK_X = 200   # Koordinat X titik deploy (sisi kiri)
-ATTACK_Y = 500   # Koordinat Y titik deploy (tengah vertikal)
-ATTACK_SPREAD_X = 30   # Spread acak X agar terlihat natural
-ATTACK_SPREAD_Y = 80   # Spread acak Y
-```
-
-### Air Defense (Spell Petir)
-
-```python
-LIGHTNING_PER_AIR_DEF = 3   # Jumlah Spell Petir per Air Defense
-MAX_AIR_DEFENSES      = 4   # Maks AD yang dicari (TH12 = 4)
-AD_MATCH_THRESHOLD    = 0.70  # Sensitivitas deteksi (turunkan jika sering gagal)
-```
-
-Bot akan **otomatis mendeteksi** posisi Air Defense menggunakan `templates/AD_template.png`. Jika gagal, akan fallback ke koordinat di `AIR_DEFENSE_COORDS`.
-
----
-
-## 🔍 File Debug
-
-Bot otomatis menyimpan gambar debug untuk membantu troubleshooting:
+Output:
 
 | File | Isi |
 |---|---|
-| `debug_Gold_thresh.png` | Hasil preprocessing OCR Gold |
-| `debug_Elixir_thresh.png` | Hasil preprocessing OCR Elixir |
-| `debug_Dark_thresh.png` | Hasil preprocessing OCR Dark Elixir |
-| `debug_ad_detect.png` | Deteksi Air Defense — kotak merah di setiap AD yang ditemukan |
-| `debug_next_mask.png` | Mask warna oranye (fallback deteksi tombol Next) |
-| `calibrate_overlay.png` | Overlay semua koordinat aktif |
+| `loot.csv` | `time,gold,elixir,dark,attacked` — satu baris per base dinilai |
+| `bot.log` | log kalau dijalankan `python bot.py >> bot.log 2>&1` |
+| `debug/calibrate.png` | overlay ROI loot + skor template state |
+| `debug/` | frame tambahan kalau `SAVE_DEBUG_SHOTS = True` |
 
 ---
 
-## 🧩 Alur Kerja Bot
+## Konfigurasi
 
-```
-START
-  │
-  ▼
-Scan Resource (OCR Gold / Elixir / Dark)
-  │
-  ├─ [Tidak Memenuhi Target] ──► Klik Next ──► Tunggu 5s ──► Kembali Scan
-  │
-  └─ [Memenuhi Target]
-        │
-        ▼
-     FASE 1: Deploy Spell Petir ke Air Defense
-        │  └── Deteksi AD via AD_template.png
-        │  └── 3x Spell per AD
-        │
-        ▼
-     FASE 2: Deploy Pasukan & Hero dari 1 Titik
-        │  └── Naga Petir (8x)
-        │  └── Naga Api (8x)
-        │  └── Wall Wrecker (1x)
-        │  └── Hero × 4 (1x each)
-        │
-        ▼
-     Tunggu Battle Selesai (180 detik)
-        │
-        ▼
-     Tekan ESC → Kembali ke Home
-        │
-        ▼
-     Kembali Scan (loop)
-```
+Semua di class `Config` (`bot.py`).
+
+| Variabel | Default | Arti |
+|---|---|---|
+| `TARGETS` | Gold/Elixir 400k | Ambang loot |
+| `ANY_TARGET` | `True` | Cukup satu jenis loot |
+| `DEPLOY_POINT` | `(140, 520)` | Titik turun pasukan |
+| `DEPLOY_ORDER` | 6 slot | Unit + jumlah tap |
+| `SPELL_SLOT` | `(1127, 945)` | Slot Lightning Spell |
+| `TOTAL_LIGHTNING` | `11` | Petir per serangan |
+| `LIGHTNING_SPOTS` | 4 titik core | Sasaran petir |
+| `HERO_CARDS` | 4 kartu | Kartu hero (BK, AQ, GW, RC) |
+| `ABILITY_DELAYS` | `(30, 62)` | Jadwal ulti hero (detik) |
+| `BATTLE_WAIT` | `210` | Batas tunggu battle selesai |
+| `POLL` | `0.5` | Jeda antar iterasi loop |
+| `OCR_SMAX`, `OCR_VMIN` | `70`, `215` | Threshold preprocessing OCR |
+
+Koordinat tombol (`BTN_BATTLE`, `BTN_FIND`, `BTN_ATTACK`, `BTN_NEXT`,
+`BTN_END`, `BTN_RETURN`), slot kartu pasukan, dan ROI loot diukur langsung di
+1920x1080. Ganti emulator atau resolusi → ukur ulang, jangan dikira-kira.
 
 ---
 
-## ⚠️ Disclaimer
+## Troubleshooting
 
-> Bot ini dibuat untuk keperluan **edukasi dan pembelajaran** Computer Vision & Python Automation.
-> Penggunaan bot di game online dapat melanggar Terms of Service (ToS) dari Supercell.
-> **Gunakan dengan risiko sendiri.** Developer tidak bertanggung jawab atas akun yang diblokir.
+| Gejala | Penyebab / solusi |
+|---|---|
+| Pasukan tidak turun sama sekali | Pastikan `DEPLOY_POINT` masih baris sendiri di `Config` — assignment yang ketelan komentar membuat nilainya tidak pernah ada |
+| Bot diam di layar scout | Loot tidak lolos target, lihat baris `SKIP base:` di log |
+| Petir tidak keluar | `SPELL_SLOT` bergeser setelah update UI — jalankan `--calibrate` |
+| Ulti tidak kena | Hero mati sebelum +30 dtk, atau kartu hero bergeser — cek `HERO_CARDS` |
+| Angka loot kebaca `None` / 0 | Resolusi bukan 1920x1080, atau panel loot bergeser — cek `debug/calibrate.png` |
+| Battle tidak selesai > 210 dtk | `BTN_END` meleset; bot tap End Battle lalu lanjut |
+| Tap tidak diterima emulator | `input touchscreen tap` yang dipakai; `sendevent` event4 di emulator ini sering di-drop tanpa error |
 
 ---
 
-## 📄 Lisensi
+## Batasan
 
-Proyek ini menggunakan lisensi **MIT**. Bebas digunakan, dimodifikasi, dan didistribusikan dengan tetap mencantumkan kredit.
+- Tidak membaca bintang atau persentase damage — hasil serangan tidak
+  dievaluasi, langsung cari lawan berikutnya.
+- Tidak ada deteksi Air Defense (lihat bagian Petir).
+- Layout pasukan diasumsikan tetap: satu baris kartu, `y=945`.
+- `debug/`, `bot.log`, `run*.log`, `__pycache__` tidak masuk repo (`.gitignore`).
 
 ---
 
-*Built with ❤️ using Python + OpenCV + Tesseract*
+## Disclaimer
+
+> Dibuat untuk keperluan edukasi Computer Vision & otomasi Python.
+> Penggunaan bot di game online dapat melanggar Terms of Service Supercell.
+> **Gunakan dengan risiko sendiri.**
+
+## Lisensi
+
+MIT — bebas dipakai, dimodifikasi, dan didistribusikan dengan mencantumkan
+kredit.
