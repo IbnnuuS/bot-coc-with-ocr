@@ -32,10 +32,9 @@ HOME --tap Battle--> MENU --tap Find a Match--> ARMY --tap Attack!--> SCOUT
               tunggu battle selesai --> HOME
 ```
 
-`UNKNOWN` (layar hasil battle / transisi matchmaking) butuh **2 frame
-berturut-turut** sebelum bot tap "Return Home". Satu frame transisi saja tidak
-cukup: tap buta di layar transisi mendarat di bar pasukan dan malah memilih
-kartu.
+`UNKNOWN` (layar hasil battle / transisi matchmaking) butuh **6 frame
+berturut-turut** sebelum bot tap "Return Home". Awan matchmaking 2–5 detik
+tidak akan memicu tap buta di bar pasukan.
 
 ---
 

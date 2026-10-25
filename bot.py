@@ -340,9 +340,8 @@ class Bot:
                 logging.info("battle selesai, kembali ke home")
                 return
             if state == "UNKNOWN":
-                # layar hasil ("Total damage"/"Return Home") atau dialog
+                # layar hasil ("Total damage"/"Return Home")
                 self.adb.tap(*Config.BTN_RETURN)
-                self.adb.tap(Config.W // 2, Config.H // 2)
             time.sleep(4)
         logging.warning("battle timeout; End Battle & lanjut")
         self.adb.tap(*Config.BTN_END)
@@ -402,17 +401,15 @@ class Bot:
                 self.adb.tap(*Config.BTN_NEXT)
                 time.sleep(Config.TAP_DELAY_NEXT)
         else:
-            # UNKNOWN sering cuma animasi 2-4 dtk (matchmaking / ganti base).
-            # Butuh 2 frame berturut-turut sebelum tap buta: tap "Return Home"
-            # di layar transisi jatuh ke bar pasukan dan malah memilih kartu.
+            # UNKNOWN sering cuma animasi awan 2-5 dtk (matchmaking / ganti base).
+            # Butuh 6 frame berturut-turut sebelum tap Return Home, tanpa tap tengah
+            # layar supaya kalau pas awan buka tidak sengaja menurunkan hero/troop.
             self._unknown += 1
-            if self._unknown < 2:
+            if self._unknown < 6:
                 return
             self._unknown = 0
-            # layar hasil (Total damage / Return Home) atau dialog
             self.snap("unknown")
             self.adb.tap(*Config.BTN_RETURN)
-            self.adb.tap(Config.W // 2, Config.H // 2)
             time.sleep(Config.TAP_DELAY_UNKNOWN)
 
     def loop(self):
