@@ -1,7 +1,8 @@
-"""CoC bot — ADB + sendevent edition (UI CoC 2026, LDPlayer).
+"""CoC bot — ADB + OCR edition (UI CoC 2026, LDPlayer 1920x1080).
 
-`input tap` diblokir CoC untuk tombol konfirmasi, jadi tap dikirim sebagai
-event touchscreen mentah (protocol B) via `sendevent` — terbukti lolos.
+Tap dikirim lewat `input touchscreen tap` (terbukti diterima CoC).
+Filter: Gold >= 800k DAN Elixir >= 800k. Loot cocok -> deploy 6 unit +
+11 petir ke Air Defense. Loot kurang -> Next.
 
   python bot.py --state       # baca state + loot sekali (read-only)
   python bot.py --calibrate   # simpan debug/calibrate.png beranotasi
@@ -37,9 +38,9 @@ class Config:
     # --- loot saat scout: panel kiri-atas "Available Loot" ---
     # x1=98 melewati icon koin/elixir, x2=295 memuat angka hingga 10 000 000 (3 angka berspasi)
     REGION_LOOT = {
-        "Gold":   (98, 130, 295, 175),
-        "Elixir": (98, 192, 295, 237),
-        "Dark":   (98, 252, 295, 295),
+        "Gold":   (100, 128, 330, 178),
+        "Elixir": (100, 190, 330, 240),
+        "Dark":   (100, 250, 330, 300),
     }
     # bar loot sendiri (home): kanan-atas
     REGION_HOME = {
@@ -63,8 +64,8 @@ class Config:
     BTN_BATTLE   = (122, 972)    # tombol "Battle" di home
     BTN_FIND     = (330, 790)    # "Find a Match"
     BTN_ATTACK   = (1696, 964)   # "Attack!" hijau (ARMY panel)
-    BTN_NEXT     = (1749, 769)   # Next: ganti base tanpa keluar (loot berubah saat diuji)
-    BTN_END      = (180, 795)    # "End Battle" merah kiri-bawah saat scout/battle
+    BTN_NEXT     = (1750, 775)   # Next: pusat tombol terukur (template btn_next center 1749,769)
+    BTN_END      = (137, 800)    # "End Battle" merah: pusat blob terukur (28..247, 774..842)
     BTN_RETURN   = (961, 932)    # "Return Home" di layar hasil
 
     TAP_DELAY_HOME    = 0.8
@@ -84,9 +85,12 @@ class Config:
     ]
     SPELL_SLOT = (1127, 945)        # 7. Lightning Spell x11
     TOTAL_LIGHTNING = 11            # seluruh 11 spell petir digunakan habis
-    AD_FALLBACK = (930, 520)        # titik jatuh petir kalau AD tak terdeteksi (tengah base)
-    BASE_ROI = (260, 130, 1600, 870)  # area base saat scout (tanpa UI)
-    DEPLOY_POINT = (140, 520)       # rumput tepi pantai (100% di luar batas base manapun)
+    # kartu hero (tap ulang = ability/ulti setelah hero turun)
+    HERO_CARDS = [(529, 945), (674, 945), (820, 945), (958, 945)]   # BK, AQ, GW, RC
+    ABILITY_DELAYS = (30, 62)       # detik setelah deploy; ronde 2 utk BK/AQ (2x pakai)
+    # kuadran core base (base selalu kira-kira di tengah layar saat scout)
+    LIGHTNING_SPOTS = [(780, 390), (1090, 390), (780, 650), (1090, 650)]
+    BASE_ROI = (260, 130, 1600, 870)  # area base saat scout (tanpa UI)    DEPLOY_POINT = (140, 520)       # rumput tepi pantai (100% di luar batas base manapun)
     DEPLOY_SPREAD = (20, 45)
 
     # deteksi tombol End Battle: blob merah kiri-bawah (UI baru tidak punya Next)
@@ -94,7 +98,6 @@ class Config:
 
     POLL = 0.5
     BATTLE_WAIT = 210            # max detik tunggu battle selesai (3 menit + margin)
-    PREP_TIMEOUT = 60            # countdown "Battle starts in" ~30 detik
     SAVE_DEBUG_SHOTS = False
 
 
@@ -131,24 +134,13 @@ class Adb:
     # ---- sendevent touchscreen (protocol B), node range 1280x720 ----
     TOUCH = "/dev/input/event4"
 
-    def tap(self, gx, gy, hold=0.06):
-        x, y = int(gx * 2 / 3), int(gy * 2 / 3)
-        e = self.TOUCH
-        seq = [
-            f"sendevent {e} 3 47 0",          # MT_SLOT 0
-            f"sendevent {e} 3 57 100",        # TRACKING_ID
-            f"sendevent {e} 3 53 {x}",        # POSITION_X
-            f"sendevent {e} 3 54 {y}",        # POSITION_Y
-            f"sendevent {e} 3 58 1",          # PRESSURE
-            f"sendevent {e} 1 330 1",         # BTN_TOUCH down
-            f"sendevent {e} 0 0 0",
-            f"sleep {hold}",
-            f"sendevent {e} 3 47 0",
-            f"sendevent {e} 3 57 4294967295", # tracking -1 = lepas
-            f"sendevent {e} 1 330 0",
-            f"sendevent {e} 0 0 0",
-        ]
-        self.shell(" ; ".join(seq))
+    def tap(self, gx, gy, hold=None):
+        """Tap via InputManager (terbukti diterima CoC di LDPlayer).
+
+        sendevent event4 tidak dipakai lagi: urutan MT protocol B di emulator
+        ini sering di-drop sehingga tap hilang tanpa error.
+        """
+        self.shell(f"input touchscreen tap {int(gx)} {int(gy)}")
 
 
 # ============================================================
@@ -195,19 +187,25 @@ def ocr_number(img, roi, smax=Config.OCR_SMAX, vmin=Config.OCR_VMIN, plain=False
 
 
 def read_loot_scout(img):
-    """Membaca loot CoC format 3 digit berspasi (misal: 1 000 000, 800 000)."""
+    """Baca loot CoC format ribuan berspasi: "1 320 758", "800 000", "1 200 000".
+
+    Spasi dibuang setelah tiap grup divalidasi 3 digit, supaya salah baca
+    (digit hilang) jadi None, bukan angka ngawur yang lolos filter.
+    """
     out = {}
     for k, roi in Config.REGION_LOOT.items():
         x1, y1, x2, y2 = roi
-        crop = img[y1:y2, x1:x2]
-        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(img[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
         up = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
         th = cv2.threshold(up, 175, 255, cv2.THRESH_BINARY)[1]
         raw = pytesseract.image_to_string(
             th, config="--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789 "
         ).strip()
-        cleaned = re.sub(r"[^0-9]", "", raw)
-        out[k] = int(cleaned) if cleaned else None
+        groups = re.findall(r"\d+", raw)
+        if not groups or any(len(g) != 3 for g in groups[1:]):
+            out[k] = None
+            continue
+        out[k] = int("".join(groups))
     return out
 
 
@@ -224,57 +222,6 @@ def end_button_visible(img):
     m = cv2.bitwise_or(m1, m2)
     cnts, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     return any(cv2.contourArea(c) > 5000 for c in cnts)
-
-
-def find_air_defenses(img):
-    """Deteksi Air Defense via template multi-skala (templates/ad_new.png).
-    Return list (cx, cy)."""
-    x1, y1, x2, y2 = Config.BASE_ROI
-    crop = img[y1:y2, x1:x2]
-    g0 = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-    gt = cv2.cvtColor(cv2.imread(os.path.join(os.path.dirname(__file__), "templates", "ad_new.png")),
-                      cv2.COLOR_BGR2GRAY)
-    hits = []
-    for s in np.arange(0.7, 1.45, 0.1):
-        t = cv2.resize(gt, None, fx=s, fy=s)
-        if t.shape[0] >= g0.shape[0] or t.shape[1] >= g0.shape[1]:
-            continue
-        r = cv2.matchTemplate(g0, t, cv2.TM_CCOEFF_NORMED)
-        ys, xs = np.where(r >= 0.50)
-        for y, x in zip(ys, xs):
-            hits.append((float(r[y, x]), x + x1 + t.shape[1] // 2, y + y1 + t.shape[0] // 2))
-    hits.sort(reverse=True)
-    kept = []
-    for sc, cx, cy in hits:
-        if all(abs(cx - a) > 40 or abs(cy - b) > 40 for _, a, b in kept):
-            kept.append((sc, cx, cy))
-    out = [(c[1], c[2]) for c in kept[:4]]
-    if out:
-        return out
-    # fallback heuristik lama (tip roket merah) kalau template nihil
-    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-    m = cv2.inRange(hsv, np.array([0, 170, 170], np.uint8), np.array([8, 255, 255], np.uint8))
-    m |= cv2.inRange(hsv, np.array([172, 170, 170], np.uint8), np.array([180, 255, 255], np.uint8))
-    m = cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
-    cnts, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    out = []
-    for c in cnts:
-        x, y, w, h = cv2.boundingRect(c)
-        if not (8 < w < 70 and 8 < h < 70 and cv2.contourArea(c) > 40):
-            continue
-        cx, cy = x + w // 2 + x1, y + h // 2 + y1
-        bx1, bx2 = max(0, cx - 20 - x1), cx + 20 - x1
-        by1, by2 = y + h // 2 + 10, y + h // 2 + 45
-        body = hsv[by1:by2, bx1:bx2]
-        if body.size and ((body[:, :, 1] < 60) & (body[:, :, 2] > 120)).mean() > 0.15:
-            out.append((cx, cy))
-    out.sort()
-    merged = []
-    for p in out:
-        if merged and abs(p[0] - merged[-1][0]) < 30 and abs(p[1] - merged[-1][1]) < 30:
-            continue
-        merged.append(p)
-    return merged[:4]
 
 
 def top_text(img):
@@ -319,6 +266,7 @@ class Bot:
         self.adb = Adb()
         os.makedirs(Config.OUT_DIR, exist_ok=True)
         self._csv_new = not os.path.exists(Config.CSV)
+        self._unknown = 0
 
     def snap(self, name=None):
         img = self.adb.shot()
@@ -336,42 +284,20 @@ class Bot:
                         loot.get("Gold"), loot.get("Elixir"),
                         loot.get("Dark"), int(attacked)])
 
-    def wait_prep_end(self):
-        """Tunggu countdown "Battle starts in" (~30 dtk) sebelum deploy.
-        Selesai = kata 'starts' hilang dari layar atas. Deploy dipicu
-        seketika setelah countdown habis (poll 1 dtk)."""
-        t0 = time.time()
-        while time.time() - t0 < Config.PREP_TIMEOUT:
-            img = self.snap()
-            if img is None:
-                time.sleep(1)
-                continue
-            if "starts" not in top_text(img):
-                logging.info("prep selesai (%.0fs)", time.time() - t0)
-                return
-            time.sleep(1)
-        logging.info("prep timeout; lanjut deploy")
-
     # ---------------- aksi ----------------
-    def cast_lightning(self, img):
-        """Petir ke tiap Air Defense yang terdeteksi. SEMUA 11 spell petir digunakan habis."""
-        ads = find_air_defenses(img)
-        if not ads:
-            ads = [Config.AD_FALLBACK]
-            logging.info("Air Defense tidak terdeteksi, fallback ke %s", ads)
-        dbg = img.copy()
-        for cx, cy in ads:
-            cv2.circle(dbg, (cx, cy), 40, (0, 0, 255), 3)
-        cv2.imwrite(os.path.join(Config.OUT_DIR, "ad_detect.png"), dbg)
-        logging.info("Air Defense: %s (cast %d petir)", ads, Config.TOTAL_LIGHTNING)
+    def cast_lightning(self):
+        """Sebar semua petir ke Config.LIGHTNING_SPOTS (kuadran core base).
 
-        # Pilih kartu petir di slot 7
+        Deteksi Air Defense otomatis dibuang: template tidak pernah match >0.46
+        jadi hasilnya selalu false positive. Petir ke kuadran core lebih stabil.
+        """
+        spots = Config.LIGHTNING_SPOTS
+        logging.info("petir -> %d titik %s (%d spell)", len(spots), spots, Config.TOTAL_LIGHTNING)
         self.adb.tap(*Config.SPELL_SLOT)
         time.sleep(0.3)
-        # Distribusikan seluruh 11 petir ke AD secara merata
         for i in range(Config.TOTAL_LIGHTNING):
-            cx, cy = ads[i % len(ads)]
-            jx, jy = np.random.randint(-12, 12), np.random.randint(-12, 12)
+            cx, cy = spots[i % len(spots)]
+            jx, jy = np.random.randint(-15, 15), np.random.randint(-15, 15)
             self.adb.tap(cx + jx, cy + jy)
             time.sleep(0.18)
 
@@ -386,6 +312,24 @@ class Bot:
                              Config.DEPLOY_POINT[1] + np.random.randint(-dy, dy))
                 time.sleep(0.12)
             time.sleep(0.1)
+
+    def cast_hero_abilities(self):
+        """Ulti hero = tap ulang kartu hero yang sudah turun (UI baru CoC mobile).
+
+        Dijadwalkan Config.ABILITY_DELAYS dari akhir deploy: kalau diklik
+        langsung, hero masih jalan ke base dan ability kebuang. Ronde 2 untuk
+        BK/AQ yang ability-nya bisa 2x.
+        """
+        for i, delay in enumerate(Config.ABILITY_DELAYS):
+            time.sleep(max(0.0, delay - (Config.ABILITY_DELAYS[i - 1] if i else 0)))
+            img = self.snap()
+            if img is None or not battle_running(img):
+                logging.info("battle selesai sebelum ronde %d, ulti dihentikan", i + 1)
+                return
+            for x, y in Config.HERO_CARDS:
+                self.adb.tap(x + np.random.randint(-3, 3), y + np.random.randint(-3, 3))
+                time.sleep(0.25)
+            logging.info("ulti hero ronde %d (+%ds)", i + 1, delay)
 
     def wait_battle_end(self):
         t0 = time.time()
@@ -413,6 +357,8 @@ class Bot:
             return
         state = detect_state(img)
         logging.info("state=%s", state)
+        if state != "UNKNOWN":
+            self._unknown = 0
 
         if state == "HOME":
             self.adb.tap(*Config.BTN_BATTLE)
@@ -435,16 +381,33 @@ class Bot:
             self.log_csv(loot, enough)
             if enough:
                 logging.info("Loot target terpenuhi! Langsung serang!")
-                self.deploy()                  # 1-6: naga x10, wall wrecker, BK, AQ, GW, RC (langsung trigger battle)
-                self.cast_lightning(img)       # 7: semua 11 petir ke Air Defense
+                self.deploy()                  # 1-6: dragon x10, wall wrecker, BK, AQ, GW, RC
+                img2 = self.snap()
+                if img2 is not None and not battle_running(img2):
+                    # deploy ditolak (masih "Battle starts in") -> ulang sekali
+                    logging.info("deploy belum masuk, ulang 3 dtk lagi")
+                    time.sleep(3)
+                    self.deploy()
+                self.cast_lightning()           # 7: semua 11 petir ke kuadran core
+                self.cast_hero_abilities()      # 8: ulti hero, ronde +30s & +62s
                 time.sleep(3)
                 self.wait_battle_end()
             else:
+                short = {k: loot.get(k) for k, t in Config.TARGETS.items() if (loot.get(k) or 0) < t}
+                logging.info("SKIP base: %s < target %s", short,
+                             {k: t for k, t in Config.TARGETS.items() if k in short})
                 # Next: ganti base langsung (tanpa keluar ke home)
                 self.adb.tap(*Config.BTN_NEXT)
                 time.sleep(Config.TAP_DELAY_NEXT)
         else:
-            # UNKNOWN: layar hasil (Return Home) / dialog; tap tombol + tengah
+            # UNKNOWN sering cuma animasi 2-4 dtk (matchmaking / ganti base).
+            # Butuh 2 frame berturut-turut sebelum tap buta: tap "Return Home"
+            # di layar transisi jatuh ke bar pasukan dan malah memilih kartu.
+            self._unknown += 1
+            if self._unknown < 2:
+                return
+            self._unknown = 0
+            # layar hasil (Total damage / Return Home) atau dialog
             self.snap("unknown")
             self.adb.tap(*Config.BTN_RETURN)
             self.adb.tap(Config.W // 2, Config.H // 2)
