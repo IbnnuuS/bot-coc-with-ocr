@@ -35,10 +35,11 @@ class Config:
     CSV = os.path.join(HERE, "loot.csv")
 
     # --- loot saat scout: panel kiri-atas "Available Loot" ---
+    # x1=98 melewati icon koin/elixir, x2=295 memuat angka hingga 10 000 000 (3 angka berspasi)
     REGION_LOOT = {
-        "Gold":   (56, 132, 244, 170),
-        "Elixir": (56, 195, 244, 228),
-        "Dark":   (56, 253, 244, 285),
+        "Gold":   (98, 130, 295, 175),
+        "Elixir": (98, 192, 295, 237),
+        "Dark":   (98, 252, 295, 295),
     }
     # bar loot sendiri (home): kanan-atas
     REGION_HOME = {
@@ -66,11 +67,11 @@ class Config:
     BTN_END      = (180, 795)    # "End Battle" merah kiri-bawah saat scout/battle
     BTN_RETURN   = (961, 932)    # "Return Home" di layar hasil
 
-    TAP_DELAY_HOME  = 1.2
-    TAP_DELAY_MENU  = 2.0
-    TAP_DELAY_ARMY  = 3.0
-    TAP_DELAY_NEXT  = 2.2
-    TAP_DELAY_UNKNOWN = 1.5
+    TAP_DELAY_HOME    = 0.8
+    TAP_DELAY_MENU    = 1.0
+    TAP_DELAY_ARMY    = 1.2
+    TAP_DELAY_NEXT    = 1.0
+    TAP_DELAY_UNKNOWN = 1.0
 
     # urutan deploy: (x, y, jumlah tap) — satu baris kartu, y=945
     DEPLOY_ORDER = [
@@ -82,18 +83,18 @@ class Config:
         (958, 945, 1),    # 6. Royal Champion 18
     ]
     SPELL_SLOT = (1127, 945)        # 7. Lightning Spell x11
+    TOTAL_LIGHTNING = 11            # seluruh 11 spell petir digunakan habis
     AD_FALLBACK = (930, 520)        # titik jatuh petir kalau AD tak terdeteksi (tengah base)
-    LIGHTNING_PER_AD = 3            # 3 petir per Air Defense
     BASE_ROI = (260, 130, 1600, 870)  # area base saat scout (tanpa UI)
-    DEPLOY_POINT = (240, 540)    # area jatuh pasukan (sisi kiri)
-    DEPLOY_SPREAD = (40, 90)
+    DEPLOY_POINT = (140, 520)       # rumput tepi pantai (100% di luar batas base manapun)
+    DEPLOY_SPREAD = (20, 45)
 
     # deteksi tombol End Battle: blob merah kiri-bawah (UI baru tidak punya Next)
     END_ROI = (0, 740, 350, 880)
 
-    POLL = 1.5
+    POLL = 0.5
     BATTLE_WAIT = 210            # max detik tunggu battle selesai (3 menit + margin)
-    PREP_TIMEOUT = 45            # countdown "Battle starts in" ~30 detik
+    PREP_TIMEOUT = 60            # countdown "Battle starts in" ~30 detik
     SAVE_DEBUG_SHOTS = False
 
 
@@ -194,7 +195,20 @@ def ocr_number(img, roi, smax=Config.OCR_SMAX, vmin=Config.OCR_VMIN, plain=False
 
 
 def read_loot_scout(img):
-    return {k: ocr_number(img, r, plain=True) for k, r in Config.REGION_LOOT.items()}
+    """Membaca loot CoC format 3 digit berspasi (misal: 1 000 000, 800 000)."""
+    out = {}
+    for k, roi in Config.REGION_LOOT.items():
+        x1, y1, x2, y2 = roi
+        crop = img[y1:y2, x1:x2]
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        up = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
+        th = cv2.threshold(up, 175, 255, cv2.THRESH_BINARY)[1]
+        raw = pytesseract.image_to_string(
+            th, config="--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789 "
+        ).strip()
+        cleaned = re.sub(r"[^0-9]", "", raw)
+        out[k] = int(cleaned) if cleaned else None
+    return out
 
 
 def read_loot_home(img):
@@ -324,53 +338,54 @@ class Bot:
 
     def wait_prep_end(self):
         """Tunggu countdown "Battle starts in" (~30 dtk) sebelum deploy.
-        Selesai = kata 'starts' hilang dari layar atas."""
+        Selesai = kata 'starts' hilang dari layar atas. Deploy dipicu
+        seketika setelah countdown habis (poll 1 dtk)."""
         t0 = time.time()
         while time.time() - t0 < Config.PREP_TIMEOUT:
             img = self.snap()
             if img is None:
-                time.sleep(2)
+                time.sleep(1)
                 continue
-            txt = top_text(img)
-            if "starts" not in txt:
-                logging.info("prep selesai (tidak ada countdown)")
+            if "starts" not in top_text(img):
+                logging.info("prep selesai (%.0fs)", time.time() - t0)
                 return
-            time.sleep(2)
+            time.sleep(1)
         logging.info("prep timeout; lanjut deploy")
 
     # ---------------- aksi ----------------
     def cast_lightning(self, img):
-        """Petir ke tiap Air Defense yang terdeteksi."""
+        """Petir ke tiap Air Defense yang terdeteksi. SEMUA 11 spell petir digunakan habis."""
         ads = find_air_defenses(img)
         if not ads:
-            # deteksi gagal -> pakai AD terakhir yang pernah ketemu, kalau tidak ada pakai tengah base
-            ads = getattr(self, "_last_ad", None) or [Config.AD_FALLBACK]
+            ads = [Config.AD_FALLBACK]
             logging.info("Air Defense tidak terdeteksi, fallback ke %s", ads)
-        else:
-            self._last_ad = ads
         dbg = img.copy()
         for cx, cy in ads:
             cv2.circle(dbg, (cx, cy), 40, (0, 0, 255), 3)
         cv2.imwrite(os.path.join(Config.OUT_DIR, "ad_detect.png"), dbg)
-        logging.info("Air Defense: %s", ads)
-        for cx, cy in ads:
-            for _ in range(Config.LIGHTNING_PER_AD):
-                self.adb.tap(*Config.SPELL_SLOT)          # pilih kartu petir
-                time.sleep(0.5)
-                jx, jy = np.random.randint(-10, 10), np.random.randint(-10, 10)
-                self.adb.tap(cx + jx, cy + jy)            # jatuhkan ke AD
-                time.sleep(0.7)
+        logging.info("Air Defense: %s (cast %d petir)", ads, Config.TOTAL_LIGHTNING)
+
+        # Pilih kartu petir di slot 7
+        self.adb.tap(*Config.SPELL_SLOT)
+        time.sleep(0.3)
+        # Distribusikan seluruh 11 petir ke AD secara merata
+        for i in range(Config.TOTAL_LIGHTNING):
+            cx, cy = ads[i % len(ads)]
+            jx, jy = np.random.randint(-12, 12), np.random.randint(-12, 12)
+            self.adb.tap(cx + jx, cy + jy)
+            time.sleep(0.18)
 
     def deploy(self):
-        """Deploy sesuai Config.DEPLOY_ORDER, lalu petir terakhir (slot 7)."""
+        """Deploy cepat sesuai Config.DEPLOY_ORDER di rumput luar base."""
         dx, dy = Config.DEPLOY_SPREAD
         for sx, sy, taps in Config.DEPLOY_ORDER:
-            self.adb.tap(sx + np.random.randint(-6, 6), sy + np.random.randint(-5, 5))
-            time.sleep(0.5)
+            self.adb.tap(sx + np.random.randint(-4, 4), sy + np.random.randint(-4, 4))
+            time.sleep(0.2)
             for _ in range(taps):
                 self.adb.tap(Config.DEPLOY_POINT[0] + np.random.randint(-dx, dx),
                              Config.DEPLOY_POINT[1] + np.random.randint(-dy, dy))
-                time.sleep(0.25)
+                time.sleep(0.12)
+            time.sleep(0.1)
 
     def wait_battle_end(self):
         t0 = time.time()
@@ -419,9 +434,10 @@ class Bot:
             logging.info("loot=%s cukup=%s", loot, enough)
             self.log_csv(loot, enough)
             if enough:
-                self.deploy()                  # 1-6: naga, wall wrecker, BK, AQ, GW, RC
-                self.cast_lightning(img)       # 7: petir terakhir ke Air Defense
-                time.sleep(5)
+                logging.info("Loot target terpenuhi! Langsung serang!")
+                self.deploy()                  # 1-6: naga x10, wall wrecker, BK, AQ, GW, RC (langsung trigger battle)
+                self.cast_lightning(img)       # 7: semua 11 petir ke Air Defense
+                time.sleep(3)
                 self.wait_battle_end()
             else:
                 # Next: ganti base langsung (tanpa keluar ke home)
