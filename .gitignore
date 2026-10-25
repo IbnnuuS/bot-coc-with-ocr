@@ -3,3 +3,5 @@ __pycache__/
 bot.log
 run*.log
 debug/
+debug_*.png
+calibrate_*.png

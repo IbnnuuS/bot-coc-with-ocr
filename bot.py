@@ -1,8 +1,8 @@
 """CoC bot — ADB + OCR edition (UI CoC 2026, LDPlayer 1920x1080).
 
 Tap dikirim lewat `input touchscreen tap` (terbukti diterima CoC).
-Filter: Gold >= 800k DAN Elixir >= 800k. Loot cocok -> deploy 6 unit +
-11 petir ke Air Defense. Loot kurang -> Next.
+Filter: Gold >= 900k ATAU Elixir >= 900k (Config.ANY_TARGET).
+Loot cocok -> deploy 6 unit + 11 petir ke core + ulti hero (+30s, +62s).
 
   python bot.py --state       # baca state + loot sekali (read-only)
   python bot.py --calibrate   # simpan debug/calibrate.png beranotasi
@@ -50,7 +50,8 @@ class Config:
     }
     OCR_SMAX, OCR_VMIN = 70, 215
     # filter base: cukup salah satu (gold ATAU elixir) supaya cepat dapat target
-    TARGETS = {"Gold": 400_000, "Elixir": 400_000}   # Dark tidak difilter
+    TARGETS = {"Gold": 900_000, "Elixir": 900_000}   # Dark tidak difilter
+    MAX_LOOT = {"Gold": 3_500_000, "Elixir": 3_500_000, "Dark": 50_000}
     ANY_TARGET = True            # True: gold/elixir salah satu lolos = serang
 
     # --- template state (1080p) ---
@@ -92,7 +93,6 @@ class Config:
     ABILITY_DELAYS = (30, 62)       # detik setelah deploy; ronde 2 utk BK/AQ (2x pakai)
     # kuadran core base (base selalu kira-kira di tengah layar saat scout)
     LIGHTNING_SPOTS = [(780, 390), (1090, 390), (780, 650), (1090, 650)]
-    BASE_ROI = (260, 130, 1600, 870)  # area base saat scout (tanpa UI)
     DEPLOY_POINT = (140, 520)       # rumput tepi pantai (100% di luar batas base manapun)
     DEPLOY_SPREAD = (20, 45)
 
@@ -134,15 +134,8 @@ class Adb:
             time.sleep(0.5)
         return None
 
-    # ---- sendevent touchscreen (protocol B), node range 1280x720 ----
-    TOUCH = "/dev/input/event4"
-
-    def tap(self, gx, gy, hold=None):
-        """Tap via InputManager (terbukti diterima CoC di LDPlayer).
-
-        sendevent event4 tidak dipakai lagi: urutan MT protocol B di emulator
-        ini sering di-drop sehingga tap hilang tanpa error.
-        """
+    def tap(self, gx, gy):
+        """Tap via InputManager (terbukti diterima CoC di LDPlayer)."""
         self.shell(f"input touchscreen tap {int(gx)} {int(gy)}")
 
 
@@ -171,30 +164,33 @@ def match_score(img, tpl_path, roi=None):
     return float(cv2.matchTemplate(g, tpl, cv2.TM_CCOEFF_NORMED).max())
 
 
-def ocr_number(img, roi, smax=Config.OCR_SMAX, vmin=Config.OCR_VMIN, plain=False):
-    """plain=True: angka putih polos (panel Available Loot) — threshold biasa."""
+def ocr_number(img, roi, smax=Config.OCR_SMAX, vmin=Config.OCR_VMIN):
     x1, y1, x2, y2 = roi
-    crop = img[y1:y2, x1:x2]
-    if plain:
-        up = cv2.resize(cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY), None,
-                        fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
-        bw = cv2.threshold(up, 180, 255, cv2.THRESH_BINARY)[1]
-    else:
-        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-        m = ((hsv[:, :, 1] < smax) & (hsv[:, :, 2] > vmin)).astype(np.uint8) * 255
-        bw = cv2.resize(m, None, fx=3, fy=3, interpolation=cv2.INTER_NEAREST)
+    hsv = cv2.cvtColor(img[y1:y2, x1:x2], cv2.COLOR_BGR2HSV)
+    m = ((hsv[:, :, 1] < smax) & (hsv[:, :, 2] > vmin)).astype(np.uint8) * 255
+    bw = cv2.resize(m, None, fx=3, fy=3, interpolation=cv2.INTER_NEAREST)
     txt = pytesseract.image_to_string(
         bw, config="--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789")
     digits = re.sub(r"\D", "", txt)
     return int(digits) if digits else None
 
 
-def read_loot_scout(img):
-    """Baca loot CoC format ribuan berspasi: "1 320 758", "800 000", "1 200 000".
+def _parse_loot_text(raw, max_val=3_500_000):
+    """Parse format ribuan CoC ('1 320 758', '800 000', '1000').
 
-    Spasi dibuang setelah tiap grup divalidasi 3 digit, supaya salah baca
-    (digit hilang) jadi None, bukan angka ngawur yang lolos filter.
+    Buang digit artefak tepi icon di grup pertama (mis. '8995 740' -> '995 740')
+    dan tolak nilai di atas max_val.
     """
+    groups = re.findall(r"\d+", raw or "")
+    if len(groups) > 1 and len(groups[0]) > 3:
+        groups[0] = groups[0][-3:]
+    if not groups or any(len(g) != 3 for g in groups[1:]):
+        return None
+    val = int("".join(groups))
+    return val if val <= max_val else None
+
+
+def read_loot_scout(img):
     out = {}
     for k, roi in Config.REGION_LOOT.items():
         x1, y1, x2, y2 = roi
@@ -204,11 +200,7 @@ def read_loot_scout(img):
         raw = pytesseract.image_to_string(
             th, config="--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789 "
         ).strip()
-        groups = re.findall(r"\d+", raw)
-        if not groups or any(len(g) != 3 for g in groups[1:]):
-            out[k] = None
-            continue
-        out[k] = int("".join(groups))
+        out[k] = _parse_loot_text(raw, Config.MAX_LOOT[k])
     return out
 
 
@@ -327,7 +319,8 @@ class Bot:
         for i, delay in enumerate(Config.ABILITY_DELAYS):
             time.sleep(max(0.0, delay - (Config.ABILITY_DELAYS[i - 1] if i else 0)))
             img = self.snap()
-            if img is None or not battle_running(img):
+            # Cek blob merah End Battle dulu (kebal naga/petir yang nutup teks atas)
+            if img is None or not (end_button_visible(img) or battle_running(img)):
                 logging.info("battle selesai sebelum ronde %d, ulti dihentikan", i + 1)
                 return
             for x, y in Config.HERO_CARDS:
@@ -380,6 +373,11 @@ class Bot:
                 self.wait_battle_end()
                 return
             loot = read_loot_scout(img)
+            if loot["Gold"] is None and loot["Elixir"] is None:
+                # awan transisi baru buka -> tunggu sebentar lalu baca ulang sekali
+                time.sleep(0.7)
+                img = self.snap() or img
+                loot = read_loot_scout(img)
             enough = loot_enough(loot)
             logging.info("loot=%s cukup=%s", loot, enough)
             self.log_csv(loot, enough)
@@ -461,6 +459,10 @@ def selftest():
     assert loot_enough({"Gold": 0, "Elixir": 10**6, "Dark": 10**4}) == Config.ANY_TARGET
     assert not loot_enough({"Gold": 1, "Elixir": 2, "Dark": 10**4})
     assert not loot_enough({"Gold": None, "Elixir": None, "Dark": None})
+    assert _parse_loot_text("1 320 758") == 1_320_758
+    assert _parse_loot_text("8995 740") == 995_740
+    assert _parse_loot_text("9 999 999") is None
+    assert _parse_loot_text("12 34") is None
     print("loot gate ok")
 
 

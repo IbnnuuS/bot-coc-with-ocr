@@ -46,7 +46,8 @@ Panel "Available Loot" dibaca OCR dengan format ribuan CoC — `1 000 000`,
 di-parse, jadi `1 000 000` tetap terbaca 1000000.
 
 ```python
-TARGETS = {"Gold": 400_000, "Elixir": 400_000}   # Dark tidak difilter
+TARGETS = {"Gold": 900_000, "Elixir": 900_000}   # Dark tidak difilter
+MAX_LOOT = {"Gold": 3_500_000, "Elixir": 3_500_000, "Dark": 50_000}
 ANY_TARGET = True    # gold ATAU elixir lolos = serang
 ```
 
@@ -131,10 +132,10 @@ BK/AQ yang ability-nya bisa 2x.
 ## Menjalankan
 
 ```bash
-python bot.py               # loop utama (serang terus sampai dihentikan)
-python bot.py --state       # baca state + loot sekali, read-only
-python bot.py --calibrate   # simpan debug/calibrate.png beranotasi
-python bot.py --selftest    # cek vision tanpa device
+.\run                       # loop utama via Python Laragon 3.10 (atau: python bot.py)
+.\run --state               # baca state + loot sekali, read-only
+.\run --calibrate           # simpan debug/calibrate.png beranotasi
+.\run --selftest            # cek vision tanpa device
 ```
 
 `--state` dan `--calibrate` tidak menekan tombol apa pun, jadi aman dijalankan
@@ -159,7 +160,8 @@ Semua di class `Config` (`bot.py`).
 
 | Variabel | Default | Arti |
 |---|---|---|
-| `TARGETS` | Gold/Elixir 400k | Ambang loot |
+| `TARGETS` | Gold/Elixir 900k | Ambang loot |
+| `MAX_LOOT` | 3.5M / 50k | Batas atas sanitasi OCR |
 | `ANY_TARGET` | `True` | Cukup satu jenis loot |
 | `DEPLOY_POINT` | `(140, 520)` | Titik turun pasukan |
 | `DEPLOY_ORDER` | 6 slot | Unit + jumlah tap |
