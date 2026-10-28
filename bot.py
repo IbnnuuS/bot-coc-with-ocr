@@ -895,6 +895,9 @@ class Bot:
         for name, taps, utype in Config.ARMY_ORDER:
             if name in card_map:
                 sx, sy = card_map[name][0], card_map[name][1]
+            elif utype in ("troop", "siege") and name in Config.FALLBACK_SLOTS:
+                sx, sy = Config.FALLBACK_SLOTS[name]
+                logging.info("kartu '%s' pakai fallback slot (%d, %d)", name, sx, sy)
             elif not card_map and name in Config.FALLBACK_SLOTS:
                 sx, sy = Config.FALLBACK_SLOTS[name]
             else:
@@ -902,11 +905,11 @@ class Bot:
                 continue
 
             self.adb.tap(sx + np.random.randint(-4, 4), sy + np.random.randint(-4, 4))
-            time.sleep(0.25)
+            time.sleep(0.30)
 
             if side == "FOUR_SIDES":
                 all_sides = list(Config.ATTACK_LINES.keys())
-                total_taps = taps + 3 if utype == "troop" else max(2, taps)
+                total_taps = taps + 3 if utype == "troop" else max(3, taps)
                 for tap_idx in range(total_taps):
                     s_name = all_sides[tap_idx % len(all_sides)]
                     p1, p2 = Config.ATTACK_LINES[s_name]
@@ -923,6 +926,14 @@ class Bot:
                     for pt in points:
                         self.adb.tap(pt[0], pt[1])
                         time.sleep(0.10)
+                elif utype == "siege":
+                    # Siege Machine (Wall Wrecker): tap 4x agar pasti turun menembus batas merah
+                    cx = (p1[0] + p2[0]) // 2
+                    cy = (p1[1] + p2[1]) // 2
+                    for _ in range(4):
+                        jx, jy = int(np.random.randint(-10, 10)), int(np.random.randint(-10, 10))
+                        self.adb.tap(cx + jx, cy + jy)
+                        time.sleep(0.12)
                 else:
                     cx = (p1[0] + p2[0]) // 2 + int(np.random.randint(-10, 10))
                     cy = (p1[1] + p2[1]) // 2 + int(np.random.randint(-10, 10))
@@ -932,13 +943,12 @@ class Bot:
 
             time.sleep(0.15)
 
-        # 2. Failsafe Cleanup Sweep (Sapu Bersih Sisa Pasukan di Pantai Bebas Red-Line)
-        # Jika ada naga tertahan akibat titik garis menabrak batas base musuh yang lebar
+        # 2. Failsafe Cleanup Sweep (Sapu Bersih Sisa Pasukan & Siege di Pantai Bebas Red-Line)
         time.sleep(0.3)
         beach_x, beach_y = getattr(Config, "SAFE_BEACH_DROP", (135, 520))
-        logging.info("[DEPLOY] Sapu bersih sisa pasukan di pantai aman (%d, %d)...", beach_x, beach_y)
+        logging.info("[DEPLOY] Sapu bersih sisa pasukan & siege di pantai aman (%d, %d)...", beach_x, beach_y)
         for name, taps, utype in Config.ARMY_ORDER:
-            if utype == "troop":
+            if utype in ("troop", "siege"):
                 if name in card_map:
                     sx, sy = card_map[name][0], card_map[name][1]
                 elif name in Config.FALLBACK_SLOTS:
@@ -947,10 +957,11 @@ class Bot:
                     continue
                 self.adb.tap(sx, sy)
                 time.sleep(0.2)
-                for _ in range(6):
+                t_count = 6 if utype == "troop" else 3
+                for _ in range(t_count):
                     jx, jy = int(np.random.randint(-15, 15)), int(np.random.randint(-25, 25))
                     self.adb.tap(beach_x + jx, beach_y + jy)
-                    time.sleep(0.08)
+                    time.sleep(0.10)
 
         time.sleep(0.4)
         self.check_speed_up()
