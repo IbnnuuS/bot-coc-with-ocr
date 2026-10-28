@@ -132,7 +132,7 @@ class Config:
 
     # --- Susunan Pasukan Dinamis (Template Matching bar y=945) ---
     UNIT_TPL_DIR = asset_path("templates", "units")
-    UNIT_THRESHOLD = 0.75
+    UNIT_THRESHOLD = 0.72
     AD_TPL_DIR = asset_path("templates", "ad")
     AD_THRESHOLD = 0.80
     # Urutan deploy: (nama_unit, jumlah_tap, jenis)
@@ -140,6 +140,7 @@ class Config:
     ARMY_ORDER = [
         ("edrag", 10, "troop"),
         ("wall_wrecker", 1, "siege"),
+        ("minion_prince", 1, "hero"),
         ("king", 1, "hero"),
         ("queen", 1, "hero"),
         ("warden", 1, "hero"),
@@ -151,6 +152,7 @@ class Config:
     FALLBACK_SLOTS = {
         "edrag": (206, 945),
         "wall_wrecker": (378, 945),
+        "minion_prince": (529, 945),
         "king": (529, 945),
         "queen": (674, 945),
         "warden": (820, 945),
