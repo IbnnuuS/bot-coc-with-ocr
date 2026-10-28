@@ -110,7 +110,7 @@ class Config:
     # --- template state (1080p) ---
     TPL = {
         "HOME":  (asset_path("templates", "btn_battle.png"), (20, 880, 225, 1064)),
-        "MENU":  (asset_path("templates", "btn_find.png"),   (100, 715, 555, 810)),
+        "MENU":  (asset_path("templates", "btn_find.png"),   (95, 710, 565, 890)),
         "ARMY":  (asset_path("templates", "btn_attack.png"), (1500, 915, 1890, 1010)),
     }
     TPL_THRESHOLD = 0.80
