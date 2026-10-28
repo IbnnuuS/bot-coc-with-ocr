@@ -135,6 +135,8 @@ class Config:
     UNIT_THRESHOLD = 0.72
     AD_TPL_DIR = asset_path("templates", "ad")
     AD_THRESHOLD = 0.80
+    STORAGE_TPL_DIR = asset_path("templates", "storages")
+    STORAGE_THRESHOLD = 0.84
     # Urutan deploy: (nama_unit, jumlah_tap, jenis)
     # jenis: "troop", "siege", "hero", "spell"
     ARMY_ORDER = [
@@ -483,8 +485,89 @@ def get_line_points(p1, p2, count, jitter=12):
     return points
 
 
+def find_base_storages(img, tpl_dir=Config.STORAGE_TPL_DIR, thresh=Config.STORAGE_THRESHOLD):
+    """Deteksi posisi spesifik Gold, Elixir, dan Dark Elixir Storage via masked template matching."""
+    crop_base = img[160:860, 240:1700]
+    hsv = cv2.cvtColor(crop_base, cv2.COLOR_BGR2HSV)
+    detected = []
+
+    for tpl_name in ["gold", "elixir", "dark"]:
+        tpl_path = os.path.join(tpl_dir, f"{tpl_name}.png")
+        if not os.path.exists(tpl_path):
+            continue
+        rgba = cv2.imread(tpl_path, cv2.IMREAD_UNCHANGED)
+        if rgba is None or rgba.shape[2] != 4:
+            continue
+        bgr = rgba[:, :, :3]
+        mask = rgba[:, :, 3]
+
+        for scale in [0.40, 0.50, 0.60, 0.70]:
+            w = int(bgr.shape[1] * scale)
+            h = int(bgr.shape[0] * scale)
+            if w >= crop_base.shape[1] or h >= crop_base.shape[0] or w < 20 or h < 20:
+                continue
+            r_bgr = cv2.resize(bgr, (w, h), interpolation=cv2.INTER_AREA)
+            r_mask = cv2.resize(mask, (w, h), interpolation=cv2.INTER_AREA)
+            _, r_mask = cv2.threshold(r_mask, 127, 255, cv2.THRESH_BINARY)
+
+            res = cv2.matchTemplate(crop_base, r_bgr, cv2.TM_CCORR_NORMED, mask=r_mask)
+            locs = np.where(res >= thresh)
+            for pt in zip(*locs[::-1]):
+                bx, by = pt[0] + w // 2, pt[1] + h // 2
+                hw, hh = w // 2, h // 2
+                sub_hsv = hsv[max(0, by - hh):min(hsv.shape[0], by + hh), max(0, bx - hw):min(hsv.shape[1], bx + hw)]
+                if sub_hsv.size == 0:
+                    continue
+
+                valid = False
+                if tpl_name == "elixir":
+                    valid = np.count_nonzero(cv2.inRange(sub_hsv, np.array([135, 70, 70]), np.array([170, 255, 255]))) > 20
+                elif tpl_name == "gold":
+                    valid = np.count_nonzero(cv2.inRange(sub_hsv, np.array([18, 100, 120]), np.array([35, 255, 255]))) > 35
+                elif tpl_name == "dark":
+                    valid = np.count_nonzero(cv2.inRange(sub_hsv, np.array([125, 50, 25]), np.array([175, 255, 140]))) > 25
+
+                if valid:
+                    gx = bx + 240
+                    gy = by + 160
+                    detected.append((gx, gy, float(res[pt[1], pt[0]]), tpl_name))
+
+    # Non-maximum suppression
+    detected.sort(key=lambda x: x[2], reverse=True)
+    kept = []
+    for d in detected:
+        if not any((d[0] - k[0]) ** 2 + (d[1] - k[1]) ** 2 < 55 ** 2 for k in kept):
+            kept.append(d)
+    return kept
+
+
 def detect_best_attack_side(img):
     """Pindai densitas storage Gold/Elixir/Dark di 4 kuadran base lawan (Smart Attack)."""
+    storages = find_base_storages(img)
+    weights = {"gold": 1.0, "elixir": 1.0, "dark": 2.5}
+    cx, cy = 960, 500
+
+    if len(storages) >= 2:
+        scores = {"KIRI_ATAS": 0.0, "KANAN_ATAS": 0.0, "KIRI_BAWAH": 0.0, "KANAN_BAWAH": 0.0}
+        counts = {"gold": 0, "elixir": 0, "dark": 0}
+        for sx, sy, sc, st in storages:
+            counts[st] += 1
+            w = weights.get(st, 1.0)
+            if sx < cx and sy < cy:
+                scores["KIRI_ATAS"] += w
+            elif sx >= cx and sy < cy:
+                scores["KANAN_ATAS"] += w
+            elif sx < cx and sy >= cy:
+                scores["KIRI_BAWAH"] += w
+            else:
+                scores["KANAN_BAWAH"] += w
+
+        best = max(scores, key=lambda k: scores[k])
+        logging.info("[SMART] Deteksi Storage via template: %d Gold, %d Elixir, %d Dark Storage",
+                     counts["gold"], counts["elixir"], counts["dark"])
+        return best, scores
+
+    # Fallback jika base tertutup kabut/skin khusus
     crop_base = img[160:840, 240:1700]
     hsv = cv2.cvtColor(crop_base, cv2.COLOR_BGR2HSV)
 
@@ -502,7 +585,6 @@ def detect_best_attack_side(img):
     opened = cv2.morphologyEx(combined, cv2.MORPH_OPEN, kernel)
     cnts, _ = cv2.findContours(opened, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    cx, cy = 960, 500
     scores = {"KIRI_ATAS": 0.0, "KANAN_ATAS": 0.0, "KIRI_BAWAH": 0.0, "KANAN_BAWAH": 0.0}
 
     for c in cnts:
