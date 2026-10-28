@@ -5,3 +5,6 @@ run*.log
 debug/
 debug_*.png
 calibrate_*.png
+build/
+dist/
+*.spec
