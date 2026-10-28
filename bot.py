@@ -133,6 +133,8 @@ class Config:
     # --- Susunan Pasukan Dinamis (Template Matching bar y=945) ---
     UNIT_TPL_DIR = asset_path("templates", "units")
     UNIT_THRESHOLD = 0.75
+    AD_TPL_DIR = asset_path("templates", "ad")
+    AD_THRESHOLD = 0.80
     # Urutan deploy: (nama_unit, jumlah_tap, jenis)
     # jenis: "troop", "siege", "hero", "spell"
     ARMY_ORDER = [
@@ -425,6 +427,45 @@ def detect_army_cards(img, tpl_dir=Config.UNIT_TPL_DIR, thresh=Config.UNIT_THRES
     return detected
 
 
+def find_air_defenses(img, tpl_dir=Config.AD_TPL_DIR, threshold=Config.AD_THRESHOLD):
+    """Deteksi bangunan Air Defense lawan via multi-scale masked template matching (Level 7-13)."""
+    if not os.path.isdir(tpl_dir):
+        return []
+    x_off, y_off = 280, 130
+    roi = img[y_off:850, x_off:1640]
+    hits = []
+
+    import glob
+    for p in glob.glob(os.path.join(tpl_dir, "*.png")):
+        tpl_bgra = cv2.imread(p, cv2.IMREAD_UNCHANGED)
+        if tpl_bgra is None or tpl_bgra.shape[2] < 4:
+            continue
+        t_bgr = tpl_bgra[:, :, :3]
+        t_mask = tpl_bgra[:, :, 3]
+
+        for s in [0.45, 0.50, 0.55, 0.60]:
+            resized_bgr = cv2.resize(t_bgr, None, fx=s, fy=s)
+            resized_mask = cv2.resize(t_mask, None, fx=s, fy=s)
+            if resized_bgr.shape[0] >= roi.shape[0] or resized_bgr.shape[1] >= roi.shape[1]:
+                continue
+            res = cv2.matchTemplate(roi, resized_bgr, cv2.TM_CCORR_NORMED, mask=resized_mask)
+            ys, xs = np.where(res >= threshold)
+            for y, x in zip(ys, xs):
+                score = float(res[y, x])
+                cx = int(x + x_off + resized_bgr.shape[1] // 2)
+                cy = int(y + y_off + resized_bgr.shape[0] // 2)
+                hits.append((score, cx, cy))
+
+    hits.sort(reverse=True)
+    kept = []
+    for sc, cx, cy in hits:
+        if all(abs(cx - a) > 60 or abs(cy - b) > 60 for _, a, b in kept):
+            kept.append((sc, cx, cy))
+            if len(kept) >= 4:
+                break
+    return [(cx, cy) for _, cx, cy in kept]
+
+
 def get_line_points(p1, p2, count, jitter=12):
     """Bagi garis p1->p2 menjadi count titik berjarak rata (line deploy) dengan sedikit jitter."""
     if count <= 1:
@@ -703,21 +744,30 @@ class Bot:
         self.adb.tap(*Config.BTN_SURRENDER_CONFIRM)
         time.sleep(1.0)
 
-    def cast_lightning(self, card_map=None):
-        """Sebar semua petir ke Config.LIGHTNING_SPOTS (kuadran core base)."""
+    def cast_lightning(self, card_map=None, img=None):
+        """Jatuhkan petir ke Air Defense yang terdeteksi, atau fallback ke titik core base."""
         card_map = card_map or {}
         if Config.SPELL_UNIT in card_map:
             sx, sy = card_map[Config.SPELL_UNIT][0], card_map[Config.SPELL_UNIT][1]
         else:
             sx, sy = Config.FALLBACK_SLOTS.get(Config.SPELL_UNIT, (1127, 945))
-        spots = Config.LIGHTNING_SPOTS
-        logging.info("petir -> slot (%d, %d), %d titik %s (%d spell)",
-                     sx, sy, len(spots), spots, Config.TOTAL_LIGHTNING)
+
+        spots = []
+        if img is not None:
+            spots = find_air_defenses(img)
+
+        if not spots:
+            spots = Config.LIGHTNING_SPOTS
+            logging.info("[PETIR] AD tidak terdeteksi, fallback ke core base %s (%d spell)", spots, Config.TOTAL_LIGHTNING)
+        else:
+            logging.info("[PETIR] Terdeteksi %d Air Defense: %s (%d spell)", len(spots), spots, Config.TOTAL_LIGHTNING)
+
         self.adb.tap(sx, sy)
-        time.sleep(0.3)
+        time.sleep(0.35)
         for i in range(Config.TOTAL_LIGHTNING):
             cx, cy = spots[i % len(spots)]
-            jx, jy = np.random.randint(-15, 15), np.random.randint(-15, 15)
+            jx = int(np.random.randint(-10, 10))
+            jy = int(np.random.randint(-10, 10))
             self.adb.tap(cx + jx, cy + jy)
             time.sleep(0.18)
 
@@ -954,6 +1004,10 @@ class Bot:
                     logging.info("Smart Attack memilih sisi %s (densitas storage: %s)",
                                  best_side, {k: int(v) for k, v in scores.items()})
 
+                # 1. Spell petir jatuh PERTAMA menghancurkan Air Defense musuh
+                self.cast_lightning(card_map, img)
+
+                # 2. Deploy pasukan & hero berbaris rata di sisi perimeter luar
                 self.deploy(card_map, chosen_side)
                 img2 = self.snap()
                 if img2 is not None and not battle_running(img2):
@@ -961,8 +1015,9 @@ class Bot:
                     logging.info("deploy belum masuk, ulang 3 dtk lagi")
                     time.sleep(3)
                     self.deploy(card_map, chosen_side)
-                self.cast_lightning(card_map)           # 7: spell petir
-                self.cast_hero_abilities(card_map)      # 8: ulti hero, ronde +30s & +62s
+
+                # 3. Ulti hero
+                self.cast_hero_abilities(card_map)      # ulti hero, ronde +30s & +62s
                 time.sleep(2)
                 self.wait_battle_end(t_deploy)
                 self._attacks_since_collect += 1
@@ -1022,10 +1077,15 @@ class Bot:
             cv2.rectangle(vis, (cx - 35, cy - 45), (cx + 35, cy + 45), (0, 255, 0), 2)
             cv2.putText(vis, f"{name} {score:.2f}", (cx - 35, cy - 50),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 0), 1)
+        ad_targets = find_air_defenses(img)
+        for i, (cx, cy) in enumerate(ad_targets):
+            cv2.circle(vis, (int(cx), int(cy)), 30, (0, 0, 255), 2)
+            cv2.putText(vis, f"AD {i+1}", (int(cx) - 20, int(cy) - 35),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 255), 2)
         cv2.imwrite(os.path.join(Config.OUT_DIR, "calibrate.png"), vis)
-        logging.info("state=%s scout_loot=%s home_loot=%s end_btn=%s bubbles=%d cards=%d",
+        logging.info("state=%s scout_loot=%s home_loot=%s end_btn=%s bubbles=%d cards=%d ads=%d",
                      detect_state(img), read_loot_scout(img), read_loot_home(img),
-                     end_button_visible(img), len(find_collector_bubbles(img)), len(army_cards))
+                     end_button_visible(img), len(find_collector_bubbles(img)), len(army_cards), len(ad_targets))
 
 
 def selftest():
@@ -1099,6 +1159,9 @@ def selftest():
             side, sc = detect_best_attack_side(im_ad)
             assert side in Config.ATTACK_LINES
             print(f"smart attack ok (terpilih {side})")
+            detected_ads = find_air_defenses(im_ad)
+            assert len(detected_ads) >= 1, "harus mendeteksi Air Defense di ad_detect.png"
+            print(f"air defense detection ok ({len(detected_ads)} AD terdeteksi)")
 
 
 if __name__ == "__main__":
