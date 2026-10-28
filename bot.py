@@ -111,7 +111,7 @@ class Config:
     TPL = {
         "HOME":  (asset_path("templates", "btn_battle.png"), (20, 880, 225, 1064)),
         "MENU":  (asset_path("templates", "btn_find.png"),   (100, 715, 555, 810)),
-        "ARMY":  (asset_path("templates", "btn_attack.png"), (1520, 880, 1850, 958)),
+        "ARMY":  (asset_path("templates", "btn_attack.png"), (1500, 915, 1890, 1010)),
     }
     TPL_THRESHOLD = 0.80
 
