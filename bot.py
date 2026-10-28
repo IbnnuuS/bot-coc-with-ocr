@@ -123,6 +123,8 @@ class Config:
     BTN_NEXT     = (1750, 775)   # Next: pusat tombol terukur (template btn_next center 1749,769)
     BTN_END      = (137, 800)    # "End Battle" merah: pusat blob terukur (28..247, 774..842)
     BTN_RETURN   = (961, 932)    # "Return Home" di layar hasil
+    AUTO_SPEED_UP: bool = True
+    BTN_SPEED_TPL = asset_path("templates", "btn_speed_1x.png")
 
     TAP_DELAY_HOME    = 0.8
     TAP_DELAY_MENU    = 1.0
@@ -468,6 +470,30 @@ def find_air_defenses(img, tpl_dir=Config.AD_TPL_DIR, threshold=Config.AD_THRESH
             if len(kept) >= 4:
                 break
     return [(cx, cy) for _, cx, cy in kept]
+
+
+def find_speed_button(img, thresh=0.80):
+    """Cari tombol percepat battle (1x / hijau) di paruh bawah layar."""
+    tpl_p = Config.BTN_SPEED_TPL
+    if not os.path.exists(tpl_p):
+        return None
+    tpl = cv2.imread(tpl_p)
+    if tpl is None:
+        return None
+    roi = img[600:1080, :]
+    for s in [1.0, 1.4, 1.8]:
+        w = int(tpl.shape[1] * s)
+        h = int(tpl.shape[0] * s)
+        if w >= roi.shape[1] or h >= roi.shape[0]:
+            continue
+        r_tpl = cv2.resize(tpl, (w, h), interpolation=cv2.INTER_LINEAR)
+        res = cv2.matchTemplate(roi, r_tpl, cv2.TM_CCOEFF_NORMED)
+        _, max_v, _, max_l = cv2.minMaxLoc(res)
+        if max_v >= thresh:
+            cx = int(max_l[0] + w // 2)
+            cy = int(max_l[1] + 600 + h // 2)
+            return cx, cy, float(max_v)
+    return None
 
 
 def get_line_points(p1, p2, count, jitter=12):
@@ -926,6 +952,26 @@ class Bot:
                     self.adb.tap(beach_x + jx, beach_y + jy)
                     time.sleep(0.08)
 
+        time.sleep(0.4)
+        self.check_speed_up()
+
+    def check_speed_up(self, img=None):
+        """Otomatis tap tombol percepat battle (1x -> 4x) jika terdeteksi."""
+        if not getattr(Config, "AUTO_SPEED_UP", True):
+            return False
+        img = img if img is not None else self.snap()
+        if img is None:
+            return False
+        btn = find_speed_button(img)
+        if btn:
+            cx, cy, sc = btn
+            logging.info("[PERCEPAT] Tombol 1x terdeteksi di (%d, %d) [skor %.2f], tap 2x ke 4x", cx, cy, sc)
+            self.adb.tap(cx, cy)
+            time.sleep(0.18)
+            self.adb.tap(cx, cy)
+            return True
+        return False
+
     def cast_hero_abilities(self, card_map=None):
         """Ulti hero = tap ulang kartu hero yang sudah turun (UI baru CoC mobile).
 
@@ -955,6 +1001,7 @@ class Bot:
                 self.adb.tap(x + np.random.randint(-3, 3), y + np.random.randint(-3, 3))
                 time.sleep(0.25)
             logging.info("ulti hero ronde %d (+%ds, %d hero)", i + 1, delay, len(hero_slots))
+            self.check_speed_up(img)
 
     def wait_battle_end(self, battle_t0=None):
         t0 = battle_t0 or time.time()
@@ -983,6 +1030,9 @@ class Bot:
                 self.adb.tap(*Config.BTN_RETURN)
                 time.sleep(2)
                 continue
+
+            # Percepat battle ke 4x jika tombol 1x terdeteksi
+            self.check_speed_up(img)
 
             # Auto End Battle jika loot habis atau stagnan
             if Config.END_IF_LOOT_EMPTY and elapsed >= 30 and (end_button_visible(img) or battle_running(img)):

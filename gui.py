@@ -145,7 +145,13 @@ class App(ctk.CTk):
                                                command=self._on_switch_change)
         if Config.AUTO_RECONNECT:
             self.sw_auto_reconnect.select()
-        self.sw_auto_reconnect.grid(row=5, column=0, padx=12, pady=(4, 12), sticky="w")
+        self.sw_auto_reconnect.grid(row=5, column=0, padx=12, pady=4, sticky="w")
+
+        self.sw_auto_speed = ctk.CTkSwitch(card_strat, text="Auto Percepat (Speed Up 4x)",
+                                           command=self._on_switch_change)
+        if getattr(Config, "AUTO_SPEED_UP", True):
+            self.sw_auto_speed.select()
+        self.sw_auto_speed.grid(row=6, column=0, padx=12, pady=(4, 12), sticky="w")
 
         # --- Card 3: Upgrade Wall ---
         card_wall = ctk.CTkFrame(self.sidebar, corner_radius=10)
@@ -349,6 +355,7 @@ class App(ctk.CTk):
         Config.END_IF_LOOT_EMPTY = bool(self.sw_auto_end.get())
         Config.AUTO_COLLECT = bool(self.sw_auto_collect.get())
         Config.AUTO_RECONNECT = bool(self.sw_auto_reconnect.get())
+        Config.AUTO_SPEED_UP = bool(self.sw_auto_speed.get())
 
         # Upgrade wall
         Config.UPGRADE_WALL_MODE = self.opt_wall.get()
