@@ -720,18 +720,26 @@ class Bot:
 
         logging.info("deploy strategi: %s (sisi aktif: %s)", strat, side)
 
+        deployed_slots = set()
         for name, taps, utype in Config.ARMY_ORDER:
             if name in card_map:
                 sx, sy = card_map[name][0], card_map[name][1]
-            elif utype in ("troop", "siege") and name in Config.FALLBACK_SLOTS:
+            elif name in Config.FALLBACK_SLOTS:
                 sx, sy = Config.FALLBACK_SLOTS[name]
+                # Jika ada unit lain yang sudah terdeteksi di slot horizontal ini, lewati
+                if any(other != name and other in card_map and abs(card_map[other][0] - sx) < 40 for other in card_map):
+                    logging.info("kartu '%s' slot (%d, %d) diisi unit terdeteksi lain, skip", name, sx, sy)
+                    continue
+                # Jika slot horizontal ini sudah pernah dipakai deploy unit sebelumnya, lewati
+                if any(abs(sx - px) < 40 for px in deployed_slots):
+                    logging.info("kartu '%s' slot (%d, %d) sudah dideploy unit lain, skip", name, sx, sy)
+                    continue
                 logging.info("kartu '%s' pakai fallback slot (%d, %d)", name, sx, sy)
-            elif not card_map and name in Config.FALLBACK_SLOTS:
-                sx, sy = Config.FALLBACK_SLOTS[name]
             else:
                 logging.info("kartu '%s' tidak dibawa / tidak aktif, skip", name)
                 continue
 
+            deployed_slots.add(sx)
             self.adb.tap(sx + np.random.randint(-4, 4), sy + np.random.randint(-4, 4))
             time.sleep(0.30)
 
@@ -804,10 +812,17 @@ class Bot:
             if utype == "hero":
                 if name in card_map:
                     hero_slots.append((card_map[name][0], card_map[name][1]))
-                elif not card_map and name in Config.FALLBACK_SLOTS:
-                    hero_slots.append(Config.FALLBACK_SLOTS[name])
-        if not hero_slots:
-            hero_slots = Config.HERO_CARDS
+                elif name in Config.FALLBACK_SLOTS:
+                    sx, sy = Config.FALLBACK_SLOTS[name]
+                    if not any(other != name and other in card_map and abs(card_map[other][0] - sx) < 40 for other in card_map):
+                        hero_slots.append((sx, sy))
+
+        # Deduplikasi slot hero yang koordinatnya berdekatan (< 40 px)
+        dedup_slots = []
+        for s in hero_slots:
+            if not any(abs(s[0] - d[0]) < 40 for d in dedup_slots):
+                dedup_slots.append(s)
+        hero_slots = dedup_slots or Config.HERO_CARDS
 
         for i, delay in enumerate(Config.ABILITY_DELAYS):
             time.sleep(max(0.0, delay - (Config.ABILITY_DELAYS[i - 1] if i else 0)))
