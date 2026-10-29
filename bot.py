@@ -20,9 +20,12 @@ import time
 
 import cv2
 import numpy as np
-import pytesseract
 
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+try:
+    import pytesseract  # type: ignore
+    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+except Exception:
+    pytesseract = None
 
 if getattr(sys, "frozen", False):
     HERE = os.path.dirname(sys.executable)
@@ -236,13 +239,63 @@ def match_score(img, tpl_path, roi=None):
     return float(cv2.matchTemplate(g, tpl, cv2.TM_CCOEFF_NORMED).max())
 
 
-def ocr_number(img, roi, smax=Config.OCR_SMAX, vmin=Config.OCR_VMIN):
+_OCR_NET = None
+_OCR_VOCAB = None
+
+
+def _get_ocr_model():
+    global _OCR_NET, _OCR_VOCAB
+    if _OCR_NET is None:
+        model_p = asset_path("models", "ocr", "latin_PP-OCRv5_rec_mobile_infer.onnx")
+        dict_p = asset_path("models", "ocr", "ppocrv5_latin_dict.txt")
+        if os.path.exists(model_p) and os.path.exists(dict_p):
+            try:
+                _OCR_NET = cv2.dnn.readNetFromONNX(model_p)
+                with open(dict_p, "r", encoding="utf-8") as f:
+                    chars = [line.strip("\r\n") for line in f]
+                _OCR_VOCAB = ["blank"] + chars + [" "]
+                logging.info("[OCR] PaddleOCR v5 (PP-OCR ONNX) engine aktif")
+            except Exception as e:
+                logging.warning("[OCR] Gagal memuat ONNX model: %s", e)
+                _OCR_NET = None
+    return _OCR_NET, _OCR_VOCAB
+
+
+def ocr_text(crop):
+    """Jalankan inferensi teks menggunakan PaddleOCR v5 (fallback Tesseract jika ONNX tidak ada)."""
+    net, vocab = _get_ocr_model()
+    if net is not None and crop is not None and crop.size > 0:
+        h, w = crop.shape[:2]
+        if h > 0 and w > 0:
+            target_h = 48
+            target_w = max(48, int(w * (target_h / float(h))))
+            resized = cv2.resize(crop, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+            blob = cv2.dnn.blobFromImage(resized, 1.0 / 127.5, (target_w, target_h), (127.5, 127.5, 127.5), swapRB=True)
+            net.setInput(blob)
+            out = net.forward()
+            preds = out[0]
+            best_indices = np.argmax(preds, axis=1)
+            res = []
+            last_idx = 0
+            for idx in best_indices:
+                if idx != 0 and idx != last_idx:
+                    if vocab is not None and idx < len(vocab):
+                        res.append(vocab[idx])
+                last_idx = idx
+            return "".join(res).strip()
+
+    # Fallback Tesseract
+    if pytesseract is not None and crop is not None and crop.size > 0:
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if len(crop.shape) == 3 else crop
+        up = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
+        th = cv2.threshold(up, 175, 255, cv2.THRESH_BINARY)[1]
+        return pytesseract.image_to_string(th, config="--oem 3 --psm 7").strip()
+    return ""
+
+
+def ocr_number(img, roi):
     x1, y1, x2, y2 = roi
-    hsv = cv2.cvtColor(img[y1:y2, x1:x2], cv2.COLOR_BGR2HSV)
-    m = ((hsv[:, :, 1] < smax) & (hsv[:, :, 2] > vmin)).astype(np.uint8) * 255
-    bw = cv2.resize(m, None, fx=3, fy=3, interpolation=cv2.INTER_NEAREST)
-    txt = pytesseract.image_to_string(
-        bw, config="--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789")
+    txt = ocr_text(img[y1:y2, x1:x2])
     digits = re.sub(r"\D", "", txt)
     return int(digits) if digits else None
 
@@ -266,12 +319,7 @@ def read_loot_scout(img):
     out = {}
     for k, roi in Config.REGION_LOOT.items():
         x1, y1, x2, y2 = roi
-        gray = cv2.cvtColor(img[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
-        up = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
-        th = cv2.threshold(up, 175, 255, cv2.THRESH_BINARY)[1]
-        raw = pytesseract.image_to_string(
-            th, config="--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789 "
-        ).strip()
+        raw = ocr_text(img[y1:y2, x1:x2])
         out[k] = _parse_loot_text(raw, Config.MAX_LOOT[k])
     return out
 
@@ -283,13 +331,7 @@ def read_loot_home(img):
     out = {}
     for k, roi in Config.REGION_HOME.items():
         x1, y1, x2, y2 = roi
-        crop = img[y1:y2, x1:x2]
-        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-        up = cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
-        th = cv2.threshold(up, 170, 255, cv2.THRESH_BINARY)[1]
-        raw = pytesseract.image_to_string(
-            th, config="--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789 "
-        ).strip()
+        raw = ocr_text(img[y1:y2, x1:x2])
         max_val = MAX_HOME_LOOT.get(k, 25_000_000)
         parsed = _parse_loot_text(raw, max_val)
         if parsed is None:
@@ -312,18 +354,9 @@ def end_button_visible(img):
 
 
 def top_text(img):
-    """OCR teks countdown area atas (putih saat prep, merah saat battle)."""
-    crop = img[0:110, 300:1600]
-    g = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-    bw = cv2.threshold(cv2.resize(g, None, fx=2, fy=2), 160, 255, cv2.THRESH_BINARY)[1]
-    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-    red = cv2.inRange(hsv, np.array([0, 120, 90], np.uint8), np.array([12, 255, 255], np.uint8))
-    red |= cv2.inRange(hsv, np.array([168, 120, 90], np.uint8), np.array([180, 255, 255], np.uint8))
-    red = cv2.resize(red, None, fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
-    out = []
-    for m in (bw, red):
-        out.append(pytesseract.image_to_string(m, config="--oem 3 --psm 11").lower())
-    return " ".join(out)
+    """Baca teks countdown area atas ('Battle starts in' / 'Battle ends in')."""
+    crop = img[20:70, 780:1140]
+    return ocr_text(crop).lower()
 
 
 def battle_running(img):

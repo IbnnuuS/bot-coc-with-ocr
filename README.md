@@ -1,6 +1,6 @@
 # CoC Auto Farmer — ADB + OCR Edition
 
-> Bot farming Clash of Clans otomatis untuk Windows emulator (LDPlayer / BlueStacks / MEmu): screen capture via ADB, deteksi kartu dinamis via OpenCV Template Matching, pembacaan resource via Tesseract OCR, dan penyerangan taktis berbasis garis (Line Deploy) & Smart Attack. Dilengkapi antarmuka grafis modern (CustomTkinter GUI) dan format executable (.exe).
+> Bot farming Clash of Clans otomatis untuk Windows emulator (LDPlayer / BlueStacks / MEmu): screen capture via ADB, deteksi kartu dinamis via OpenCV Template Matching, pembacaan resource ultra-cepat via Neural Network PaddleOCR v5 (ONNX), dan penyerangan taktis berbasis garis (Line Deploy) & Smart Attack. Dilengkapi antarmuka grafis modern (CustomTkinter GUI) dan format executable (.exe).
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)
 ![OpenCV](https://img.shields.io/badge/OpenCV-4.x-green?logo=opencv)
@@ -65,8 +65,9 @@
    - Resolusi layar: **1920 × 1080** (Landscape).
    - Mode ADB: **Aktif** (`127.0.0.1:5554` / `emulator-5554`).
    - Bahasa in-game Clash of Clans: **English** (wajib agar OCR presisi).
-3. **Tesseract OCR**:
-   - Terpasang di `C:\Program Files\Tesseract-OCR\tesseract.exe`.
+3. **Mesin OCR (PaddleOCR v5 ONNX)**:
+   - Terpasang bawaan di folder `models/ocr/` (dijalankan langsung via OpenCV `cv2.dnn`).
+   - Tidak memerlukan instalasi software OCR pihak ketiga di Windows.
 4. **Python Runtime** (Jika menjalankan via script):
    - Python 3.10+ (misal Laragon `C:\laragon\bin\python\python-3.10`).
 
