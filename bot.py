@@ -70,10 +70,10 @@ class Config:
     }
     OCR_SMAX, OCR_VMIN = 70, 215
     # --- Filter Loot (COCotz: GOLD_OR_ELIXIR, GOLD_AND_ELIXIR, GOLD_ONLY, ELIXIR_ONLY, DE_ONLY) ---
-    LOOT_MODE: str = "GOLD_OR_ELIXIR"
+    LOOT_MODE: str = "GOLD_AND_ELIXIR"
     TARGETS = {"Gold": 999_999, "Elixir": 999_999, "Dark": 5_000}
     MAX_LOOT = {"Gold": 3_500_000, "Elixir": 3_500_000, "Dark": 50_000}
-    ANY_TARGET = True            # backward-compatibility jika LOOT_MODE tidak diset
+    ANY_TARGET = False           # default logika AND (Gold DAN Elixir wajib tembus target)
 
     # --- Auto End Battle ---
     MAX_BATTLE_TIME = 180            # max durasi battle (detik) dari awal deploy

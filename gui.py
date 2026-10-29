@@ -308,6 +308,7 @@ class App(ctk.CTk):
         self._sync_config()
 
     def reset_loot_targets(self):
+        self.opt_mode.set("GOLD_AND_ELIXIR")
         self.entry_gold.delete(0, "end")
         self.entry_gold.insert(0, "999999")
         self.entry_elixir.delete(0, "end")
@@ -315,7 +316,7 @@ class App(ctk.CTk):
         self.entry_dark.delete(0, "end")
         self.entry_dark.insert(0, "5000")
         self._sync_config()
-        logging.info("[CONFIG] Target loot di-reset ke default: Gold=999,999, Elixir=999,999, Dark=5,000")
+        logging.info("[CONFIG] Target loot di-reset ke default: Mode=GOLD_AND_ELIXIR, Gold=999,999, Elixir=999,999, Dark=5,000")
 
     def start_bot(self):
         if self.bot.running:

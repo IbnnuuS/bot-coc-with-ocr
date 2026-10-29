@@ -15,7 +15,7 @@
 | Kategori | Fitur | Penjelasan |
 |---|---|---|
 | 🖥️ **Antarmuka** | **Modern Dark GUI (`gui.py` / `.exe`)** | Dashboard kontrol lengkap: tombol START/STOP di posisi atas akses cepat, tombol reset default target, live telemetry, toggle strategi serangan, dan live streaming log terminal tanpa popup CMD yang mengganggu. |
-| 🎯 **Filter Loot** | **5 Mode Evaluasi Fleksibel** | Pilihan mode: `GOLD_OR_ELIXIR`, `GOLD_AND_ELIXIR`, `GOLD_ONLY`, `ELIXIR_ONLY`, `DE_ONLY` dengan nilai default `999.999` Gold/Elixir & `5.000` Dark. Dilengkapi pembersihan spasi ribuan (`1 000 000`) dan sanitasi batas atas OCR (`MAX_HOME_LOOT`). |
+| 🎯 **Filter Loot** | **5 Mode Evaluasi Fleksibel** | Pilihan mode: `GOLD_AND_ELIXIR` (default), `GOLD_OR_ELIXIR`, `GOLD_ONLY`, `ELIXIR_ONLY`, `DE_ONLY` dengan nilai default `999.999` Gold/Elixir & `5.000` Dark. Dilengkapi pembersihan spasi ribuan (`1 000 000`) dan sanitasi batas atas OCR (`MAX_HOME_LOOT`). |
 | ⚔️ **Penyerangan** | **Smart Attack (Auto Cari Storage)** | Memindai densitas dan posisi spesifik gedung Gold Storage, Elixir Storage, dan Dark Elixir Storage lawan (`templates/storages/`) via masked template matching dan verifikasi warna inti di 4 kuadran base, lalu otomatis memilih sudut serangan terbaik (prioritas DE 2.5x). |
 | 📏 **Formasi** | **Line Deployment (Rata Sisi)** | Pasukan diturunkan **berbaris rata** di sepanjang garis perimeter luar (`KIRI_ATAS`, `KANAN_ATAS`, `KIRI_BAWAH`, `KANAN_BAWAH`, atau `FOUR_SIDES`), bukan bertumpuk di satu titik pixel. |
 | 🛡️ **Failsafe** | **Beach Cleanup Sweep** | Sapu bersih sisa pasukan & Siege Machine otomatis di area pantai aman `(135, 520)`. Menjamin 100% naga, hero, dan wall wrecker turun tuntas meskipun base musuh memiliki *corner buildings* yang melebarkan zona merah. |
