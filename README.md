@@ -14,7 +14,7 @@
 
 | Kategori | Fitur | Penjelasan |
 |---|---|---|
-| 🖥️ **Antarmuka** | **Modern Dark GUI (`gui.py` / `.exe`)** | Dashboard kontrol lengkap: tombol START/STOP di posisi atas akses cepat, tombol reset default target, live telemetry, toggle strategi serangan, auto-stop, dan live streaming log terminal tanpa popup CMD yang mengganggu. |
+| 🖥️ **Antarmuka** | **Modern Dark GUI (`gui.py` / `.exe`)** | Dashboard kontrol lengkap: tombol START/STOP di posisi atas akses cepat, tombol reset default target, live telemetry, toggle strategi serangan, dan live streaming log terminal tanpa popup CMD yang mengganggu. |
 | 🎯 **Filter Loot** | **5 Mode Evaluasi Fleksibel** | Pilihan mode: `GOLD_OR_ELIXIR`, `GOLD_AND_ELIXIR`, `GOLD_ONLY`, `ELIXIR_ONLY`, `DE_ONLY` dengan nilai default `999.999` Gold/Elixir & `5.000` Dark. Dilengkapi pembersihan spasi ribuan (`1 000 000`) dan sanitasi batas atas OCR (`MAX_HOME_LOOT`). |
 | ⚔️ **Penyerangan** | **Smart Attack (Auto Cari Storage)** | Memindai densitas dan posisi spesifik gedung Gold Storage, Elixir Storage, dan Dark Elixir Storage lawan (`templates/storages/`) via masked template matching dan verifikasi warna inti di 4 kuadran base, lalu otomatis memilih sudut serangan terbaik (prioritas DE 2.5x). |
 | 📏 **Formasi** | **Line Deployment (Rata Sisi)** | Pasukan diturunkan **berbaris rata** di sepanjang garis perimeter luar (`KIRI_ATAS`, `KANAN_ATAS`, `KIRI_BAWAH`, `KANAN_BAWAH`, atau `FOUR_SIDES`), bukan bertumpuk di satu titik pixel. |
@@ -23,10 +23,6 @@
 | ⚡ **Mantra & Hero** | **Pinpoint Air Defense & Hero Ability** | 11 Lightning Spell otomatis dijatuhkan **sebelum** pasukan ke lokasi Air Defense musuh yang terdeteksi via template matching multi-scale Level 7–13 (`templates/ad/`). Kemampuan hero diaktifkan bertahap pada delay +30 dtk dan +62 dtk. |
 | ⏩ **Akselerasi** | **Auto Percepat (Speed Up 4x)** | Otomatis mendeteksi tombol kecepatan `1x` hijau di paruh bawah layar saat pertempuran berlangsung dan langsung melakukan tap 2x untuk mempercepat durasi battle ke `4x`. |
 | ⏱️ **Efisiensi** | **Auto End Battle (Early Surrender)** | Menyerah lebih awal pasca detik ke-30 jika sisa loot $\le$ 50.000 atau angka loot stagnan selama 2 cek berturut-turut (mencegah bot bengong menunggu waktu habis). |
-| ⛏️ **Ekonomi** | **Auto Collector (Home Base)** | Deteksi gelembung koin Gold dan tetesan Elixir via segmentasi warna HSV. Diklaim otomatis tiap 1–3 siklus serangan. |
-| 🧱 **Resource Sink** | **Auto Upgrade Wall Terverifikasi** | Membuang kelebihan Gold/Elixir ke tembok sebelum matchmaking. Dilengkapi gerbang verifikasi teks judul banner agar tidak pernah salah klik bangunan/defense lain. |
-| 🔄 **Stabilitas** | **Auto Reconnect & Pop-up Dismiss** | Menutup modal pop-up event/promo via template tombol X merah berverifikasi HSV, serta otomatis menekan Reload/Okay saat koneksi terputus atau *client out of sync*. |
-| 🛑 **Proteksi Akun** | **Auto Stop & Storage Cap** | Timer operasional (berhenti setelah $N$ menit) dan batas kapasitas saldo base sendiri agar bot tidak farming berlebihan saat storage penuh. |
 
 ---
 
@@ -36,9 +32,8 @@
 [ START ]
     │
     ▼
-[ HOME BASE ] ──► Cek Auto-Stop (Timer / Cap Storage)
-    │         ──► Klaim Collector (Gelembung Koin & Elixir)
-    │         ──► Upgrade Wall Terverifikasi (Jika saldo > limit)
+[ HOME BASE ] ──► Tap "Battle"
+    │
     ▼
 [ MATCHMAKING ]
     │
@@ -123,16 +118,7 @@ python bot.py --selftest    # Uji validasi vision tanpa device
   - `Rata Kanan Bawah`: Garis serbu tenggara `(1780, 420)` s/d `(1780, 620)`.
   - `Sebar Rata 4 Sisi`: Pasukan dibagi rata ke 4 sektor keliling base.
 - **Auto End Battle**: Mengakhiri serangan jika loot tersisa $\le$ 50k atau angka stagnan.
-- **Auto Collector**: Memanen gelembung tambang di desa sendiri.
-- **Auto Reconnect**: Menutup pop-up pengumuman dan auto-reload jika terputus.
-
-### 3. Auto Upgrade Wall
-- **Mode**: `OFF`, `1X_PER_LOOP`, `ALWAYS_CHECK_LIMIT`.
-- **Keep Gold / Elixir**: Saldo cadangan yang tidak boleh dipakai untuk upgrade (contoh: simpan minimal `2,000,000`).
-
-### 4. Auto Stop & Protection
-- **Timer (menit)**: Bot berhenti otomatis setelah durasi tertentu (0 = nonaktif).
-- **Cap Gold / Elixir**: Bot berhenti saat penyimpanan base sendiri menyentuh angka tertentu.
+- **Auto Percepat**: Mempercepat pertempuran ke 4x begitu tombol 1x terdeteksi.
 
 ---
 
@@ -157,7 +143,6 @@ bot-coc-with-ocr/
 │   ├── btn_battle.png      # Tombol Battle di Home
 │   ├── btn_find.png        # Tombol Find a Match
 │   ├── btn_next.png        # Tombol Next lawan
-│   ├── btn_close_x.png     # Tombol silang merah dialog modal
 │   ├── btn_speed_1x.png    # Tombol percepat battle (1x -> 4x)
 │   ├── ad/                 # Template bangunan Air Defense (Lvl 7-13)
 │   ├── storages/           # Template bangunan Gold, Elixir & Dark Storage

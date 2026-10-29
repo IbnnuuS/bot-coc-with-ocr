@@ -173,81 +173,11 @@ class App(ctk.CTk):
             self.sw_auto_end.select()
         self.sw_auto_end.grid(row=3, column=0, padx=12, pady=4, sticky="w")
 
-        self.sw_auto_collect = ctk.CTkSwitch(card_strat, text="Auto Collector (Home Base)",
-                                             command=self._on_switch_change)
-        if Config.AUTO_COLLECT:
-            self.sw_auto_collect.select()
-        self.sw_auto_collect.grid(row=4, column=0, padx=12, pady=4, sticky="w")
-
-        self.sw_auto_reconnect = ctk.CTkSwitch(card_strat, text="Auto Reconnect & Pop-up",
-                                               command=self._on_switch_change)
-        if Config.AUTO_RECONNECT:
-            self.sw_auto_reconnect.select()
-        self.sw_auto_reconnect.grid(row=5, column=0, padx=12, pady=4, sticky="w")
-
         self.sw_auto_speed = ctk.CTkSwitch(card_strat, text="Auto Percepat (Speed Up 4x)",
                                            command=self._on_switch_change)
         if getattr(Config, "AUTO_SPEED_UP", True):
             self.sw_auto_speed.select()
-        self.sw_auto_speed.grid(row=6, column=0, padx=12, pady=(4, 12), sticky="w")
-
-        # --- Card 4: Upgrade Wall ---
-        card_wall = ctk.CTkFrame(self.sidebar, corner_radius=10)
-        card_wall.grid(row=5, column=0, padx=12, pady=6, sticky="ew")
-        card_wall.grid_columnconfigure(1, weight=1)
-
-        ctk.CTkLabel(card_wall, text="🧱 AUTO UPGRADE WALL",
-                      font=ctk.CTkFont(size=12, weight="bold"),
-                      text_color="#ec4899").grid(row=0, column=0, columnspan=2, padx=12, pady=(10, 8), sticky="w")
-
-        ctk.CTkLabel(card_wall, text="Mode:").grid(row=1, column=0, padx=12, pady=4, sticky="w")
-        self.opt_wall = ctk.CTkOptionMenu(
-            card_wall,
-            values=["OFF", "1X_PER_LOOP", "ALWAYS_CHECK_LIMIT"],
-            command=self._on_opt_change
-        )
-        self.opt_wall.set(Config.UPGRADE_WALL_MODE)
-        self.opt_wall.grid(row=1, column=1, padx=12, pady=4, sticky="ew")
-
-        ctk.CTkLabel(card_wall, text="Keep Gold:").grid(row=2, column=0, padx=12, pady=4, sticky="w")
-        self.entry_wall_gold = ctk.CTkEntry(card_wall, placeholder_text="2000000")
-        self.entry_wall_gold.insert(0, str(Config.WALL_GOLD_LIMIT))
-        self.entry_wall_gold.grid(row=2, column=1, padx=12, pady=4, sticky="ew")
-
-        ctk.CTkLabel(card_wall, text="Keep Elixir:").grid(row=3, column=0, padx=12, pady=(4, 12), sticky="w")
-        self.entry_wall_elixir = ctk.CTkEntry(card_wall, placeholder_text="2000000")
-        self.entry_wall_elixir.insert(0, str(Config.WALL_ELIXIR_LIMIT))
-        self.entry_wall_elixir.grid(row=3, column=1, padx=12, pady=(4, 12), sticky="ew")
-
-        # --- Card 5: Auto Stop & Protection ---
-        card_stop = ctk.CTkFrame(self.sidebar, corner_radius=10)
-        card_stop.grid(row=6, column=0, padx=12, pady=(6, 16), sticky="ew")
-        card_stop.grid_columnconfigure(1, weight=1)
-
-        ctk.CTkLabel(card_stop, text="🛡️ AUTO STOP & LIMIT",
-                      font=ctk.CTkFont(size=12, weight="bold"),
-                      text_color="#a855f7").grid(row=0, column=0, columnspan=2, padx=12, pady=(10, 8), sticky="w")
-
-        self.sw_auto_stop = ctk.CTkSwitch(card_stop, text="Aktifkan Auto Stop",
-                                          command=self._on_switch_change)
-        if Config.AUTO_STOP_ENABLED:
-            self.sw_auto_stop.select()
-        self.sw_auto_stop.grid(row=1, column=0, columnspan=2, padx=12, pady=4, sticky="w")
-
-        ctk.CTkLabel(card_stop, text="Timer (menit):").grid(row=2, column=0, padx=12, pady=4, sticky="w")
-        self.entry_stop_min = ctk.CTkEntry(card_stop, placeholder_text="0 (nonaktif)")
-        self.entry_stop_min.insert(0, str(Config.AUTO_STOP_MINUTES))
-        self.entry_stop_min.grid(row=2, column=1, padx=12, pady=4, sticky="ew")
-
-        ctk.CTkLabel(card_stop, text="Cap Gold:").grid(row=3, column=0, padx=12, pady=4, sticky="w")
-        self.entry_stop_gold = ctk.CTkEntry(card_stop, placeholder_text="0 (nonaktif)")
-        self.entry_stop_gold.insert(0, str(Config.STOP_GOLD_CAP))
-        self.entry_stop_gold.grid(row=3, column=1, padx=12, pady=4, sticky="ew")
-
-        ctk.CTkLabel(card_stop, text="Cap Elixir:").grid(row=4, column=0, padx=12, pady=(4, 12), sticky="w")
-        self.entry_stop_elixir = ctk.CTkEntry(card_stop, placeholder_text="0 (nonaktif)")
-        self.entry_stop_elixir.insert(0, str(Config.STOP_ELIXIR_CAP))
-        self.entry_stop_elixir.grid(row=4, column=1, padx=12, pady=(4, 12), sticky="ew")
+        self.sw_auto_speed.grid(row=4, column=0, padx=12, pady=(4, 12), sticky="w")
 
         # ================= RIGHT DASHBOARD & LOGS =================
         self.main_frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
@@ -361,35 +291,7 @@ class App(ctk.CTk):
             Config.ATTACK_STRATEGY = "SMART"
 
         Config.END_IF_LOOT_EMPTY = bool(self.sw_auto_end.get())
-        Config.AUTO_COLLECT = bool(self.sw_auto_collect.get())
-        Config.AUTO_RECONNECT = bool(self.sw_auto_reconnect.get())
         Config.AUTO_SPEED_UP = bool(self.sw_auto_speed.get())
-
-        # Upgrade wall
-        Config.UPGRADE_WALL_MODE = self.opt_wall.get()
-        try:
-            Config.WALL_GOLD_LIMIT = int(self.entry_wall_gold.get().replace("_", "").replace(",", "").strip())
-        except ValueError:
-            pass
-        try:
-            Config.WALL_ELIXIR_LIMIT = int(self.entry_wall_elixir.get().replace("_", "").replace(",", "").strip())
-        except ValueError:
-            pass
-
-        # Auto stop
-        Config.AUTO_STOP_ENABLED = bool(self.sw_auto_stop.get())
-        try:
-            Config.AUTO_STOP_MINUTES = int(self.entry_stop_min.get().replace("_", "").replace(",", "").strip())
-        except ValueError:
-            pass
-        try:
-            Config.STOP_GOLD_CAP = int(self.entry_stop_gold.get().replace("_", "").replace(",", "").strip())
-        except ValueError:
-            pass
-        try:
-            Config.STOP_ELIXIR_CAP = int(self.entry_stop_elixir.get().replace("_", "").replace(",", "").strip())
-        except ValueError:
-            pass
 
     def _on_opt_change(self, choice):
         self._sync_config()
@@ -428,11 +330,6 @@ class App(ctk.CTk):
         self.bot_thread.start()
         logging.info("Bot dimulai. Target: Gold >= %s, Elixir >= %s [%s] | Strategi: %s",
                      f"{Config.TARGETS['Gold']:,}", f"{Config.TARGETS['Elixir']:,}", Config.LOOT_MODE, Config.ATTACK_STRATEGY)
-        if Config.AUTO_STOP_ENABLED and Config.AUTO_STOP_MINUTES > 0:
-            logging.info("[AUTO STOP] Timer aktif: berhenti setelah %d menit", Config.AUTO_STOP_MINUTES)
-        if Config.UPGRADE_WALL_MODE != "OFF":
-            logging.info("[WALL] Mode: %s (Simpan min: G=%s, E=%s)",
-                         Config.UPGRADE_WALL_MODE, f"{Config.WALL_GOLD_LIMIT:,}", f"{Config.WALL_ELIXIR_LIMIT:,}")
 
     def stop_bot(self):
         self.bot.stop()

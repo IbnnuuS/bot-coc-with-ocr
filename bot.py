@@ -82,31 +82,6 @@ class Config:
     STAGNANT_CHECKS = 2              # jumlah cek berturut-turut tanpa perubahan loot
     BTN_SURRENDER_CONFIRM = (1090, 670)  # tombol Okay hijau konfirmasi surrender
 
-    # --- Auto Collector di Home Base ---
-    AUTO_COLLECT: bool = True        # klaim gelembung koin/elixir di home base
-    COLLECT_EVERY_N = (1, 3)         # klaim tiap 1-3 serangan
-
-    # --- Auto Stop & Protection ---
-    AUTO_STOP_ENABLED: bool = False
-    AUTO_STOP_MINUTES: int = 0       # 0 = nonaktif (menit durasi kerja)
-    STOP_GOLD_CAP: int = 0           # 0 = nonaktif (cap storage base sendiri)
-    STOP_ELIXIR_CAP: int = 0         # 0 = nonaktif
-
-    # --- Upgrade Wall Otomatis ---
-    UPGRADE_WALL_MODE: str = "OFF"   # "OFF", "1X_PER_LOOP", "ALWAYS_CHECK_LIMIT"
-    WALL_GOLD_LIMIT: int = 2_000_000 # Simpan minimal Gold ini di storage
-    WALL_ELIXIR_LIMIT: int = 2_000_000 # Simpan minimal Elixir ini
-    WALL_TAP_COORD: tuple = (1070, 675) # Titik segmen wall di base
-    WALL_UPGRADE_BTN: tuple = (1040, 960) # Tombol Upgrade wall di bar bawah
-    WALL_GOLD_BTN: tuple = (900, 810)     # Tombol opsi bayar Gold
-    WALL_ELIXIR_BTN: tuple = (1020, 810)  # Tombol opsi bayar Elixir
-    WALL_DESELECT_PT: tuple = (200, 150)  # Rumput luar base aman (atas-kiri) deselect
-
-    # --- Auto Reconnect & Pop-up Dismiss ---
-    AUTO_RECONNECT: bool = True
-    BTN_POPUP_OKAY: tuple = (960, 670) # Tombol reload / okay di dialog tengah
-    TPL_CLOSE_X: str = asset_path("templates", "btn_close_x.png")
-
     # --- template state (1080p) ---
     TPL = {
         "HOME":  (asset_path("templates", "btn_battle.png"), (20, 880, 225, 1064)),
@@ -363,25 +338,6 @@ def detect_state(img):
     if end_button_visible(img):
         return "SCOUT"          # End Battle terlihat = sedang scouting/base musuh
     return "UNKNOWN"
-
-
-def find_collector_bubbles(img):
-    """Deteksi gelembung koin Gold & tetesan Elixir di desa utama."""
-    village = img[130:920, 100:1820]
-    hsv = cv2.cvtColor(village, cv2.COLOR_BGR2HSV)
-    m_gold = cv2.inRange(hsv, np.array([18, 150, 180]), np.array([32, 255, 255]))
-    m_elixir = cv2.inRange(hsv, np.array([135, 120, 120]), np.array([165, 255, 255]))
-
-    points = []
-    for mask, name in [(m_gold, "gold"), (m_elixir, "elixir")]:
-        cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        for c in cnts:
-            area = cv2.contourArea(c)
-            if 300 < area < 1500:
-                x, y, w, h = cv2.boundingRect(c)
-                if 0.6 < w / h < 1.6 and 20 <= w <= 50 and 20 <= h <= 50:
-                    points.append((name, x + w // 2 + 100, y + h // 2 + 130))
-    return points
 
 
 def loot_enough(loot):
@@ -660,8 +616,6 @@ class Bot:
         os.makedirs(Config.OUT_DIR, exist_ok=True)
         self._csv_new = not os.path.exists(Config.CSV)
         self._unknown = 0
-        self._attacks_since_collect = 1
-        self._next_collect_after = np.random.randint(Config.COLLECT_EVERY_N[0], Config.COLLECT_EVERY_N[1] + 1)
         self.running = False
         self.current_state = "IDLE"
         self.total_attacks = 0
@@ -670,162 +624,6 @@ class Bot:
 
     def stop(self):
         self.running = False
-
-    def dismiss_popups(self, img):
-        """Tutup pop-up (X merah) atau dialog error / putus koneksi (Reload / Try Again)."""
-        if not Config.AUTO_RECONNECT:
-            return False
-
-        # 1. Cek tombol X merah penutup modal dialog (khusus area modal tengah, hindari HUD/frame emulator)
-        if os.path.exists(Config.TPL_CLOSE_X):
-            tpl_x = _tpl(Config.TPL_CLOSE_X)
-            if tpl_x is not None:
-                x1, y1, x2, y2 = (600, 50, 1750, 450)
-                g_roi = cv2.cvtColor(img[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY)
-                if g_roi.shape[0] >= tpl_x.shape[0] and g_roi.shape[1] >= tpl_x.shape[1]:
-                    res = cv2.matchTemplate(g_roi, tpl_x, cv2.TM_CCOEFF_NORMED)
-                    _, max_v, _, max_l = cv2.minMaxLoc(res)
-                    if max_v >= 0.82:
-                        cx = max_l[0] + x1 + tpl_x.shape[1] // 2
-                        cy = max_l[1] + y1 + tpl_x.shape[0] // 2
-
-                        # Verifikasi warna merah pada tombol X
-                        crop = img[max(0, cy - 20):cy + 20, max(0, cx - 20):cx + 20]
-                        if crop.size:
-                            hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-                            m1 = cv2.inRange(hsv, np.array([0, 120, 120]), np.array([10, 255, 255]))
-                            m2 = cv2.inRange(hsv, np.array([170, 120, 120]), np.array([180, 255, 255]))
-                            red_ratio = float((cv2.bitwise_or(m1, m2) > 0).mean())
-                            if red_ratio >= 0.15:
-                                logging.info("[POPUP] Menutup modal dialog (X merah) di (%d, %d)", cx, cy)
-                                self.adb.tap(cx, cy)
-                                time.sleep(1.0)
-                                return True
-
-        # 2. Cek teks dialog tengah (koneksi terputus / reload / out of sync)
-        crop = img[300:780, 550:1370]
-        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-        txt = pytesseract.image_to_string(gray, config="--oem 3 --psm 11").lower()
-        keywords = ("reload", "try again", "connection", "client", "server",
-                    "out of sync", "personal break", "maintenance", "another device")
-        if any(w in txt for w in keywords):
-            first_line = txt.strip().splitlines()[0] if txt.strip() else "popup"
-            logging.info("[RECONNECT] Terdeteksi dialog '%s', menekan Reload/Okay", first_line)
-            self.adb.tap(*Config.BTN_POPUP_OKAY)
-            time.sleep(3.0)
-            return True
-
-        return False
-
-    def check_auto_stop(self, img=None):
-        """Evaluasi batas waktu dan resource cap untuk perlindungan akun."""
-        if not Config.AUTO_STOP_ENABLED:
-            return False
-
-        # 1. Timer check
-        if Config.AUTO_STOP_MINUTES > 0:
-            elapsed_m = (time.time() - self.start_time) / 60.0
-            if elapsed_m >= Config.AUTO_STOP_MINUTES:
-                logging.info("[AUTO STOP] Batas waktu operasional %d menit tercapai! Menghentikan bot.",
-                             Config.AUTO_STOP_MINUTES)
-                self.stop()
-                return True
-
-        # 2. Resource cap check saat di HOME
-        if img is not None and detect_state(img) == "HOME":
-            loot = read_loot_home(img)
-            g = loot.get("Gold") or 0
-            e = loot.get("Elixir") or 0
-            if Config.STOP_GOLD_CAP > 0 and g >= Config.STOP_GOLD_CAP:
-                logging.info("[AUTO STOP] Gold di base mencapai target (%s >= %s)! Menghentikan bot.",
-                             f"{g:,}", f"{Config.STOP_GOLD_CAP:,}")
-                self.stop()
-                return True
-            if Config.STOP_ELIXIR_CAP > 0 and e >= Config.STOP_ELIXIR_CAP:
-                logging.info("[AUTO STOP] Elixir di base mencapai target (%s >= %s)! Menghentikan bot.",
-                             f"{e:,}", f"{Config.STOP_ELIXIR_CAP:,}")
-                self.stop()
-                return True
-
-        return False
-
-    def upgrade_wall(self):
-        """Upgrade wall di Home Base jika saldo melebihi limit."""
-        if Config.UPGRADE_WALL_MODE == "OFF":
-            return
-        img = self.snap()
-        if img is None or detect_state(img) != "HOME":
-            return
-        loot = read_loot_home(img)
-        g = loot.get("Gold")
-        e = loot.get("Elixir")
-
-        # Jika salah satu gagal baca/None, batalkan demi keamanan
-        if g is None or e is None:
-            return
-
-        gold_ready = g > Config.WALL_GOLD_LIMIT
-        elixir_ready = e > Config.WALL_ELIXIR_LIMIT
-
-        if not gold_ready and not elixir_ready:
-            return
-
-        max_cycles = 5 if Config.UPGRADE_WALL_MODE == "ALWAYS_CHECK_LIMIT" else 1
-        for _ in range(max_cycles):
-            # 1. Pilih wall
-            self.adb.tap(*Config.WALL_TAP_COORD)
-            time.sleep(0.7)
-
-            # 2. Verifikasi keamanan: pastikan objek yang dipilih benar Wall
-            img_sel = self.snap()
-            if img_sel is None:
-                self.adb.tap(*Config.WALL_DESELECT_PT)
-                return
-
-            crop_title = img_sel[840:910, 700:1220]
-            txt_title = pytesseract.image_to_string(
-                cv2.cvtColor(crop_title, cv2.COLOR_BGR2GRAY)
-            ).strip().lower()
-
-            if "wall" not in txt_title:
-                logging.info("[WALL] Objek terpilih bukan Wall ('%s'), membatalkan upgrade agar aman", txt_title or "kosong")
-                self.adb.tap(*Config.WALL_DESELECT_PT)
-                time.sleep(0.5)
-                return
-
-            logging.info("[WALL] Wall terverifikasi! Upgrade (Gold: %s, Elixir: %s, Limit: %s/%s)",
-                         f"{g:,}", f"{e:,}", f"{Config.WALL_GOLD_LIMIT:,}", f"{Config.WALL_ELIXIR_LIMIT:,}")
-
-            # 3. Tap tombol Upgrade wall di bar bawah
-            self.adb.tap(*Config.WALL_UPGRADE_BTN)
-            time.sleep(0.6)
-
-            # 4. Tap opsi bayar (Gold jika cukup, atau Elixir)
-            if gold_ready:
-                self.adb.tap(*Config.WALL_GOLD_BTN)
-            elif elixir_ready:
-                self.adb.tap(*Config.WALL_ELIXIR_BTN)
-            time.sleep(0.6)
-
-            # 5. Deselect di rumput aman luar base
-            self.adb.tap(*Config.WALL_DESELECT_PT)
-            time.sleep(0.5)
-
-            if Config.UPGRADE_WALL_MODE != "ALWAYS_CHECK_LIMIT":
-                break
-
-            # Cek saldo baru
-            img_new = self.snap()
-            if img_new is not None:
-                loot = read_loot_home(img_new)
-                g = loot.get("Gold")
-                e = loot.get("Elixir")
-                if g is None or e is None:
-                    break
-                gold_ready = g > Config.WALL_GOLD_LIMIT
-                elixir_ready = e > Config.WALL_ELIXIR_LIMIT
-                if not gold_ready and not elixir_ready:
-                    break
 
     def snap(self, name=None):
         img = self.adb.shot()
@@ -844,26 +642,6 @@ class Bot:
                         loot.get("Dark"), int(attacked)])
 
     # ---------------- aksi ----------------
-    def collect_resources(self):
-        """Klaim gelembung Gold/Elixir di Home Base."""
-        if not Config.AUTO_COLLECT:
-            return
-        img = self.snap()
-        if img is None or detect_state(img) != "HOME":
-            return
-        bubbles = find_collector_bubbles(img)
-        if not bubbles:
-            return
-        logging.info("klaim collector: terdeteksi %d gelembung", len(bubbles))
-        seen = set()
-        for btype, x, y in bubbles:
-            if btype not in seen:
-                seen.add(btype)
-                self.adb.tap(x + np.random.randint(-4, 4), y + np.random.randint(-4, 4))
-                time.sleep(0.4)
-        self._attacks_since_collect = 0
-        self._next_collect_after = np.random.randint(Config.COLLECT_EVERY_N[0], Config.COLLECT_EVERY_N[1] + 1)
-
     def end_battle(self):
         """Akhiri battle secara manual (tap End Battle merah + konfirmasi Okay)."""
         logging.info("akhiri battle manual (surrender)")
@@ -1107,8 +885,6 @@ class Bot:
     def step(self):
         if not self.running:
             return
-        if self.check_auto_stop():
-            return
 
         img = self.snap("last" if Config.SAVE_DEBUG_SHOTS else None)
         if img is None:
@@ -1121,11 +897,6 @@ class Bot:
             self._unknown = 0
 
         if state == "HOME":
-            if self.check_auto_stop(img):
-                return
-            if self._attacks_since_collect >= self._next_collect_after:
-                self.collect_resources()
-            self.upgrade_wall()
             self.adb.tap(*Config.BTN_BATTLE)
             time.sleep(Config.TAP_DELAY_HOME)
         elif state == "MENU":
@@ -1183,7 +954,6 @@ class Bot:
                 self.cast_hero_abilities(card_map)      # ulti hero, ronde +30s & +62s
                 time.sleep(2)
                 self.wait_battle_end(t_deploy)
-                self._attacks_since_collect += 1
             else:
                 short = {k: loot.get(k) for k, t in Config.TARGETS.items() if (loot.get(k) or 0) < t}
                 logging.info("SKIP base [%s]: %s < target %s", Config.LOOT_MODE, short,
@@ -1195,14 +965,6 @@ class Bot:
             # UNKNOWN sering cuma animasi awan 2-5 dtk (matchmaking / ganti base).
             # Butuh beberapa frame sebelum action agar tidak salah tap saat awan buka.
             self._unknown += 1
-            if self._unknown < 4:
-                return
-
-            # Coba tutup pop-up / dialog reconnect jika ada yang menghalangi
-            if self.dismiss_popups(img):
-                self._unknown = 0
-                return
-
             if self._unknown < 6:
                 return
             self._unknown = 0
@@ -1246,9 +1008,9 @@ class Bot:
             cv2.putText(vis, f"AD {i+1}", (int(cx) - 20, int(cy) - 35),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 255), 2)
         cv2.imwrite(os.path.join(Config.OUT_DIR, "calibrate.png"), vis)
-        logging.info("state=%s scout_loot=%s home_loot=%s end_btn=%s bubbles=%d cards=%d ads=%d",
+        logging.info("state=%s scout_loot=%s home_loot=%s end_btn=%s cards=%d ads=%d",
                      detect_state(img), read_loot_scout(img), read_loot_home(img),
-                     end_button_visible(img), len(find_collector_bubbles(img)), len(army_cards), len(ad_targets))
+                     end_button_visible(img), len(army_cards), len(ad_targets))
 
 
 def selftest():
@@ -1287,14 +1049,6 @@ def selftest():
     assert _parse_loot_text("12 34") is None
     print("loot parsing ok")
 
-    state_path = os.path.join(HERE, "debug", "state.png")
-    if os.path.exists(state_path):
-        state_img = cv2.imread(state_path)
-        if state_img is not None:
-            bubbles = find_collector_bubbles(state_img)
-            assert len(bubbles) > 0, "harus mendeteksi gelembung di state.png"
-            print(f"collector bubbles ok ({len(bubbles)} terdeteksi)")
-
     ad_path = os.path.join(HERE, "debug", "ad_detect.png")
     if os.path.exists(ad_path):
         im_ad = cv2.imread(ad_path)
@@ -1302,16 +1056,6 @@ def selftest():
             cards = detect_army_cards(im_ad)
             assert len(cards) >= 1, "harus mendeteksi kartu unit di army bar"
             print(f"army cards ok ({len(cards)} unit terdeteksi via template)")
-
-    ptr_path = os.path.join(HERE, "debug", "ptr_test.png")
-    if os.path.exists(ptr_path):
-        im_ptr = cv2.imread(ptr_path)
-        if im_ptr is not None and os.path.exists(Config.TPL_CLOSE_X):
-            tpl_x = _tpl(Config.TPL_CLOSE_X)
-            res = cv2.matchTemplate(cv2.cvtColor(im_ptr, cv2.COLOR_BGR2GRAY), tpl_x, cv2.TM_CCOEFF_NORMED)
-            _, max_v, _, _ = cv2.minMaxLoc(res)
-            assert max_v >= 0.82
-            print(f"popup dismiss X ok (skor {max_v:.2f})")
 
     # test line points & smart attack
     pts = get_line_points((260, 260), (650, 140), 10, jitter=0)
