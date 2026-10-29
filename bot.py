@@ -154,7 +154,6 @@ class Config:
         "KIRI_BAWAH":  ((120, 420), (130, 620)),   # Pantai berbatu barat daya (100% legal)
         "KANAN_BAWAH": ((1780, 420), (1780, 620)), # Tepi tenggara luar
     }
-    SAFE_BEACH_DROP = (135, 520)    # Titik pantai 100% aman untuk kuras sisa pasukan
     DEPLOY_POINT = (140, 520)       # fallback titik pantai
     DEPLOY_SPREAD = (15, 25)
     DEPLOY_MODE: str = "SINGLE"     # backward-compatibility
@@ -771,26 +770,6 @@ class Bot:
                         time.sleep(0.12)
 
             time.sleep(0.15)
-
-        # 2. Failsafe Cleanup Sweep (Sapu Bersih Sisa Pasukan & Siege di Pantai Bebas Red-Line)
-        time.sleep(0.3)
-        beach_x, beach_y = getattr(Config, "SAFE_BEACH_DROP", (135, 520))
-        logging.info("[DEPLOY] Sapu bersih sisa pasukan & siege di pantai aman (%d, %d)...", beach_x, beach_y)
-        for name, taps, utype in Config.ARMY_ORDER:
-            if utype in ("troop", "siege"):
-                if name in card_map:
-                    sx, sy = card_map[name][0], card_map[name][1]
-                elif name in Config.FALLBACK_SLOTS:
-                    sx, sy = Config.FALLBACK_SLOTS[name]
-                else:
-                    continue
-                self.adb.tap(sx, sy)
-                time.sleep(0.2)
-                t_count = 6 if utype == "troop" else 3
-                for _ in range(t_count):
-                    jx, jy = int(np.random.randint(-15, 15)), int(np.random.randint(-25, 25))
-                    self.adb.tap(beach_x + jx, beach_y + jy)
-                    time.sleep(0.10)
 
         time.sleep(0.4)
         self.check_speed_up()

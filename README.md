@@ -18,7 +18,6 @@
 | 🎯 **Filter Loot** | **5 Mode Evaluasi Fleksibel** | Pilihan mode: `GOLD_AND_ELIXIR` (default), `GOLD_OR_ELIXIR`, `GOLD_ONLY`, `ELIXIR_ONLY`, `DE_ONLY` dengan nilai default `999.999` Gold/Elixir & `5.000` Dark. Dilengkapi pembersihan spasi ribuan (`1 000 000`) dan sanitasi batas atas OCR (`MAX_HOME_LOOT`). |
 | ⚔️ **Penyerangan** | **Smart Attack (Auto Cari Storage)** | Memindai densitas dan posisi spesifik gedung Gold Storage, Elixir Storage, dan Dark Elixir Storage lawan (`templates/storages/`) via masked template matching dan verifikasi warna inti di 4 kuadran base, lalu otomatis memilih sudut serangan terbaik (prioritas DE 2.5x). |
 | 📏 **Formasi** | **Line Deployment (Rata Sisi)** | Pasukan diturunkan **berbaris rata** di sepanjang garis perimeter luar (`KIRI_ATAS`, `KANAN_ATAS`, `KIRI_BAWAH`, `KANAN_BAWAH`, atau `FOUR_SIDES`), bukan bertumpuk di satu titik pixel. |
-| 🛡️ **Failsafe** | **Beach Cleanup Sweep** | Sapu bersih sisa pasukan & Siege Machine otomatis di area pantai aman `(135, 520)`. Menjamin 100% naga, hero, dan wall wrecker turun tuntas meskipun base musuh memiliki *corner buildings* yang melebarkan zona merah. |
 | 🃏 **Adaptif** | **Dynamic Card Matching (`templates/units/`)** | Posisi kartu unit di bar pasukan dideteksi secara real-time via template matching portrait bersih 1080p. Mendukung Wall Wrecker dengan peringatan tanda seru (`!`) dan fallback koordinat otomatis. |
 | ⚡ **Mantra & Hero** | **Pinpoint Air Defense & Hero Ability** | 11 Lightning Spell otomatis dijatuhkan **sebelum** pasukan ke lokasi Air Defense musuh yang terdeteksi via template matching multi-scale Level 7–13 (`templates/ad/`). Kemampuan hero diaktifkan bertahap pada delay +30 dtk dan +62 dtk. |
 | ⏩ **Akselerasi** | **Auto Percepat (Speed Up 4x)** | Otomatis mendeteksi tombol kecepatan `1x` hijau di paruh bawah layar saat pertempuran berlangsung dan langsung melakukan tap 2x untuk mempercepat durasi battle ke `4x`. |
@@ -47,7 +46,6 @@
               ├──► Analisis Smart Attack (Cari kuadran storage terbanyak)
               ├──► Line Deployment (Sebar naga berbaris rata di sisi terpilih)
               ├──► Deploy Hero & Siege Machine di pusat garis
-              ├──► Failsafe Cleanup Sweep (Kuras sisa naga di pantai aman)
               ├──► Sebar 11 Petir ke kuadran core base
               ├──► Ulti Hero bertahap (+30s & +62s)
               └──► Auto End Battle monitor (Loot habis / timeout)
