@@ -14,13 +14,14 @@
 
 | Kategori | Fitur | Penjelasan |
 |---|---|---|
-| 🖥️ **Antarmuka** | **Modern Dark GUI (`gui.py` / `.exe`)** | Dashboard kontrol lengkap: live telemetry, toggle strategi serangan, form filter loot, auto-stop, dan live streaming log terminal tanpa popup CMD yang mengganggu. |
-| 🎯 **Filter Loot** | **5 Mode Evaluasi Fleksibel** | Pilihan mode: `GOLD_OR_ELIXIR`, `GOLD_AND_ELIXIR`, `GOLD_ONLY`, `ELIXIR_ONLY`, `DE_ONLY`. Dilengkapi pembersihan spasi ribuan (`1 000 000`) dan sanitasi batas atas OCR (`MAX_HOME_LOOT`). |
-| ⚔️ **Penyerangan** | **Smart Attack (Auto Cari Storage)** | Memindai densitas bangunan Gold Storage, Elixir Storage, Dark Elixir, dan Town Hall lawan via kontur HSV di 4 kuadran base, lalu otomatis memilih sudut serangan terbaik. |
+| 🖥️ **Antarmuka** | **Modern Dark GUI (`gui.py` / `.exe`)** | Dashboard kontrol lengkap: tombol START/STOP di posisi atas akses cepat, tombol reset default target, live telemetry, toggle strategi serangan, auto-stop, dan live streaming log terminal tanpa popup CMD yang mengganggu. |
+| 🎯 **Filter Loot** | **5 Mode Evaluasi Fleksibel** | Pilihan mode: `GOLD_OR_ELIXIR`, `GOLD_AND_ELIXIR`, `GOLD_ONLY`, `ELIXIR_ONLY`, `DE_ONLY` dengan nilai default `999.999` Gold/Elixir & `5.000` Dark. Dilengkapi pembersihan spasi ribuan (`1 000 000`) dan sanitasi batas atas OCR (`MAX_HOME_LOOT`). |
+| ⚔️ **Penyerangan** | **Smart Attack (Auto Cari Storage)** | Memindai densitas dan posisi spesifik gedung Gold Storage, Elixir Storage, dan Dark Elixir Storage lawan (`templates/storages/`) via masked template matching dan verifikasi warna inti di 4 kuadran base, lalu otomatis memilih sudut serangan terbaik (prioritas DE 2.5x). |
 | 📏 **Formasi** | **Line Deployment (Rata Sisi)** | Pasukan diturunkan **berbaris rata** di sepanjang garis perimeter luar (`KIRI_ATAS`, `KANAN_ATAS`, `KIRI_BAWAH`, `KANAN_BAWAH`, atau `FOUR_SIDES`), bukan bertumpuk di satu titik pixel. |
-| 🛡️ **Failsafe** | **Beach Cleanup Sweep** | Sapu bersih sisa pasukan otomatis di area pantai aman `(135, 520)`. Menjamin 100% naga dan hero turun tuntas meskipun base musuh memiliki *corner buildings* yang melebarkan zona merah. |
-| 🃏 **Adaptif** | **Dynamic Card Matching (`templates/units/`)** | Posisi kartu unit di bar pasukan dideteksi secara real-time via template matching. Bebas ganti posisi kartu, hero upgrade, atau variasi komposisi tanpa merusak koordinat. |
-| ⚡ **Mantra & Hero** | **Lightning Core & Hero Ability** | 11 Lightning Spell disebar ke 4 kuadran core base. Kemampuan hero diaktifkan bertahap pada delay +30 dtk dan +62 dtk dengan proteksi pembatalan jika battle selesai duluan. |
+| 🛡️ **Failsafe** | **Beach Cleanup Sweep** | Sapu bersih sisa pasukan & Siege Machine otomatis di area pantai aman `(135, 520)`. Menjamin 100% naga, hero, dan wall wrecker turun tuntas meskipun base musuh memiliki *corner buildings* yang melebarkan zona merah. |
+| 🃏 **Adaptif** | **Dynamic Card Matching (`templates/units/`)** | Posisi kartu unit di bar pasukan dideteksi secara real-time via template matching portrait bersih 1080p. Mendukung Wall Wrecker dengan peringatan tanda seru (`!`) dan fallback koordinat otomatis. |
+| ⚡ **Mantra & Hero** | **Pinpoint Air Defense & Hero Ability** | 11 Lightning Spell otomatis dijatuhkan **sebelum** pasukan ke lokasi Air Defense musuh yang terdeteksi via template matching multi-scale Level 7–13 (`templates/ad/`). Kemampuan hero diaktifkan bertahap pada delay +30 dtk dan +62 dtk. |
+| ⏩ **Akselerasi** | **Auto Percepat (Speed Up 4x)** | Otomatis mendeteksi tombol kecepatan `1x` hijau di paruh bawah layar saat pertempuran berlangsung dan langsung melakukan tap 2x untuk mempercepat durasi battle ke `4x`. |
 | ⏱️ **Efisiensi** | **Auto End Battle (Early Surrender)** | Menyerah lebih awal pasca detik ke-30 jika sisa loot $\le$ 50.000 atau angka loot stagnan selama 2 cek berturut-turut (mencegah bot bengong menunggu waktu habis). |
 | ⛏️ **Ekonomi** | **Auto Collector (Home Base)** | Deteksi gelembung koin Gold dan tetesan Elixir via segmentasi warna HSV. Diklaim otomatis tiap 1–3 siklus serangan. |
 | 🧱 **Resource Sink** | **Auto Upgrade Wall Terverifikasi** | Membuang kelebihan Gold/Elixir ke tembok sebelum matchmaking. Dilengkapi gerbang verifikasi teks judul banner agar tidak pernah salah klik bangunan/defense lain. |
@@ -157,6 +158,9 @@ bot-coc-with-ocr/
 │   ├── btn_find.png        # Tombol Find a Match
 │   ├── btn_next.png        # Tombol Next lawan
 │   ├── btn_close_x.png     # Tombol silang merah dialog modal
+│   ├── btn_speed_1x.png    # Tombol percepat battle (1x -> 4x)
+│   ├── ad/                 # Template bangunan Air Defense (Lvl 7-13)
+│   ├── storages/           # Template bangunan Gold, Elixir & Dark Storage
 │   └── units/              # Template kartu pasukan & mantra
 │       ├── edrag.png
 │       ├── wall_wrecker.png
