@@ -69,11 +69,41 @@ class App(ctk.CTk):
 
         lbl_sub = ctk.CTkLabel(self.sidebar, text="ADB + OCR Intelligent Engine",
                                font=ctk.CTkFont(size=11), text_color="gray60")
-        lbl_sub.grid(row=1, column=0, padx=16, pady=(0, 16), sticky="w")
+        lbl_sub.grid(row=1, column=0, padx=16, pady=(0, 12), sticky="w")
 
-        # --- Card 1: Target Loot ---
+        # --- Card 1: Action Controls (Atas) ---
+        card_act = ctk.CTkFrame(self.sidebar, corner_radius=10, fg_color="#1e293b")
+        card_act.grid(row=2, column=0, padx=12, pady=(0, 8), sticky="ew")
+        card_act.grid_columnconfigure((0, 1), weight=1)
+
+        self.btn_start = ctk.CTkButton(
+            card_act, text="▶ START BOT",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color="#10b981", hover_color="#059669", height=42,
+            command=self.start_bot
+        )
+        self.btn_start.grid(row=0, column=0, padx=(10, 4), pady=(10, 6), sticky="ew")
+
+        self.btn_stop = ctk.CTkButton(
+            card_act, text="⏹ STOP BOT",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color="#ef4444", hover_color="#dc2626", height=42,
+            state="disabled",
+            command=self.stop_bot
+        )
+        self.btn_stop.grid(row=0, column=1, padx=(4, 10), pady=(10, 6), sticky="ew")
+
+        self.btn_calibrate = ctk.CTkButton(
+            card_act, text="🔍 Ambil Snapshot / Kalibrasi",
+            font=ctk.CTkFont(size=11),
+            fg_color="#334155", hover_color="#475569", height=30,
+            command=self.run_calibrate
+        )
+        self.btn_calibrate.grid(row=1, column=0, columnspan=2, padx=10, pady=(0, 10), sticky="ew")
+
+        # --- Card 2: Target Loot ---
         card_loot = ctk.CTkFrame(self.sidebar, corner_radius=10)
-        card_loot.grid(row=2, column=0, padx=12, pady=6, sticky="ew")
+        card_loot.grid(row=3, column=0, padx=12, pady=6, sticky="ew")
         card_loot.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(card_loot, text="🎯 TARGET LOOTING",
@@ -90,23 +120,31 @@ class App(ctk.CTk):
         self.opt_mode.grid(row=1, column=1, padx=12, pady=4, sticky="ew")
 
         ctk.CTkLabel(card_loot, text="Min Gold:").grid(row=2, column=0, padx=12, pady=4, sticky="w")
-        self.entry_gold = ctk.CTkEntry(card_loot, placeholder_text="900000")
-        self.entry_gold.insert(0, str(Config.TARGETS.get("Gold", 900_000)))
+        self.entry_gold = ctk.CTkEntry(card_loot, placeholder_text="999999")
+        self.entry_gold.insert(0, str(Config.TARGETS.get("Gold", 999_999)))
         self.entry_gold.grid(row=2, column=1, padx=12, pady=4, sticky="ew")
 
         ctk.CTkLabel(card_loot, text="Min Elixir:").grid(row=3, column=0, padx=12, pady=4, sticky="w")
-        self.entry_elixir = ctk.CTkEntry(card_loot, placeholder_text="900000")
-        self.entry_elixir.insert(0, str(Config.TARGETS.get("Elixir", 900_000)))
+        self.entry_elixir = ctk.CTkEntry(card_loot, placeholder_text="999999")
+        self.entry_elixir.insert(0, str(Config.TARGETS.get("Elixir", 999_999)))
         self.entry_elixir.grid(row=3, column=1, padx=12, pady=4, sticky="ew")
 
-        ctk.CTkLabel(card_loot, text="Min Dark:").grid(row=4, column=0, padx=12, pady=(4, 12), sticky="w")
+        ctk.CTkLabel(card_loot, text="Min Dark:").grid(row=4, column=0, padx=12, pady=4, sticky="w")
         self.entry_dark = ctk.CTkEntry(card_loot, placeholder_text="5000")
         self.entry_dark.insert(0, str(Config.TARGETS.get("Dark", 5_000)))
-        self.entry_dark.grid(row=4, column=1, padx=12, pady=(4, 12), sticky="ew")
+        self.entry_dark.grid(row=4, column=1, padx=12, pady=4, sticky="ew")
 
-        # --- Card 2: Serangan & Strategi ---
+        self.btn_reset_loot = ctk.CTkButton(
+            card_loot, text="↺ Reset Default (999.999 / 5.000)",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color="#334155", hover_color="#475569", height=28,
+            command=self.reset_loot_targets
+        )
+        self.btn_reset_loot.grid(row=5, column=0, columnspan=2, padx=12, pady=(4, 10), sticky="ew")
+
+        # --- Card 3: Serangan & Strategi ---
         card_strat = ctk.CTkFrame(self.sidebar, corner_radius=10)
-        card_strat.grid(row=3, column=0, padx=12, pady=6, sticky="ew")
+        card_strat.grid(row=4, column=0, padx=12, pady=6, sticky="ew")
         card_strat.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(card_strat, text="⚔️ STRATEGI SERANGAN",
@@ -153,9 +191,9 @@ class App(ctk.CTk):
             self.sw_auto_speed.select()
         self.sw_auto_speed.grid(row=6, column=0, padx=12, pady=(4, 12), sticky="w")
 
-        # --- Card 3: Upgrade Wall ---
+        # --- Card 4: Upgrade Wall ---
         card_wall = ctk.CTkFrame(self.sidebar, corner_radius=10)
-        card_wall.grid(row=4, column=0, padx=12, pady=6, sticky="ew")
+        card_wall.grid(row=5, column=0, padx=12, pady=6, sticky="ew")
         card_wall.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(card_wall, text="🧱 AUTO UPGRADE WALL",
@@ -181,9 +219,9 @@ class App(ctk.CTk):
         self.entry_wall_elixir.insert(0, str(Config.WALL_ELIXIR_LIMIT))
         self.entry_wall_elixir.grid(row=3, column=1, padx=12, pady=(4, 12), sticky="ew")
 
-        # --- Card 4: Auto Stop & Protection ---
+        # --- Card 5: Auto Stop & Protection ---
         card_stop = ctk.CTkFrame(self.sidebar, corner_radius=10)
-        card_stop.grid(row=5, column=0, padx=12, pady=6, sticky="ew")
+        card_stop.grid(row=6, column=0, padx=12, pady=(6, 16), sticky="ew")
         card_stop.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(card_stop, text="🛡️ AUTO STOP & LIMIT",
@@ -210,36 +248,6 @@ class App(ctk.CTk):
         self.entry_stop_elixir = ctk.CTkEntry(card_stop, placeholder_text="0 (nonaktif)")
         self.entry_stop_elixir.insert(0, str(Config.STOP_ELIXIR_CAP))
         self.entry_stop_elixir.grid(row=4, column=1, padx=12, pady=(4, 12), sticky="ew")
-
-        # --- Card 5: Action Controls ---
-        card_act = ctk.CTkFrame(self.sidebar, corner_radius=10)
-        card_act.grid(row=6, column=0, padx=12, pady=6, sticky="ew")
-        card_act.grid_columnconfigure(0, weight=1)
-
-        self.btn_start = ctk.CTkButton(
-            card_act, text="▶ START BOT",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            fg_color="#10b981", hover_color="#059669", height=40,
-            command=self.start_bot
-        )
-        self.btn_start.grid(row=0, column=0, padx=12, pady=(12, 6), sticky="ew")
-
-        self.btn_stop = ctk.CTkButton(
-            card_act, text="⏹ STOP BOT",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            fg_color="#ef4444", hover_color="#dc2626", height=38,
-            state="disabled",
-            command=self.stop_bot
-        )
-        self.btn_stop.grid(row=1, column=0, padx=12, pady=6, sticky="ew")
-
-        self.btn_calibrate = ctk.CTkButton(
-            card_act, text="🔍 Ambil Snapshot / Kalibrasi",
-            font=ctk.CTkFont(size=12),
-            fg_color="#334155", hover_color="#475569", height=32,
-            command=self.run_calibrate
-        )
-        self.btn_calibrate.grid(row=2, column=0, padx=12, pady=(6, 12), sticky="ew")
 
         # ================= RIGHT DASHBOARD & LOGS =================
         self.main_frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
@@ -396,6 +404,16 @@ class App(ctk.CTk):
 
     def _on_switch_change(self):
         self._sync_config()
+
+    def reset_loot_targets(self):
+        self.entry_gold.delete(0, "end")
+        self.entry_gold.insert(0, "999999")
+        self.entry_elixir.delete(0, "end")
+        self.entry_elixir.insert(0, "999999")
+        self.entry_dark.delete(0, "end")
+        self.entry_dark.insert(0, "5000")
+        self._sync_config()
+        logging.info("[CONFIG] Target loot di-reset ke default: Gold=999,999, Elixir=999,999, Dark=5,000")
 
     def start_bot(self):
         if self.bot.running:
