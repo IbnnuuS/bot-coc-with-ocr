@@ -149,10 +149,10 @@ class Config:
     # --- Model Penyerangan Rata Sisi & Smart Attack ---
     ATTACK_STRATEGY: str = "SMART"  # "SMART", "KIRI_ATAS", "KANAN_ATAS", "KIRI_BAWAH", "KANAN_BAWAH", "FOUR_SIDES"
     ATTACK_LINES = {
-        "KIRI_ATAS":   ((200, 340), (340, 210)),   # Pesisir barat laut luar
-        "KANAN_ATAS":  ((1620, 240), (1750, 360)), # Rumput timur laut luar
-        "KIRI_BAWAH":  ((110, 430), (120, 630)),   # Pantai barat daya luar
-        "KANAN_BAWAH": ((1760, 430), (1760, 630)), # Tepi tenggara luar
+        "KIRI_ATAS":   ((140, 280), (280, 160)),   # Pesisir barat laut luar
+        "KANAN_ATAS":  ((1650, 200), (1750, 320)), # Hutan timur laut luar
+        "KIRI_BAWAH":  ((75, 460), (95, 660)),     # Pantai barat daya (100% aman red area)
+        "KANAN_BAWAH": ((1760, 550), (1660, 720)), # Rumput tenggara luar
     }
     DEPLOY_POINT = (140, 520)       # fallback titik pantai
     DEPLOY_SPREAD = (15, 25)
