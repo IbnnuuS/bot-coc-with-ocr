@@ -51,7 +51,7 @@ def asset_path(*paths):
 
 class Config:
     ADB = r"C:\LDPlayer\LDPlayer14\adb.exe"
-    SERIAL = "emulator-5554"
+    SERIAL: str = "emulator-5554"
     FORCE_SIZE = "1920x1080"     # `adb shell wm size reset` untuk balikin
     W, H = 1920, 1080
 
@@ -175,7 +175,33 @@ class Config:
 class Adb:
     def __init__(self, cfg=Config):
         self.cfg = cfg
+        self._ensure_device()
         self._lock_size()
+
+    def _raw_run(self, *args, timeout=10):
+        flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        startupinfo = None
+        if sys.platform == "win32":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        return subprocess.run([self.cfg.ADB, *args],
+                              capture_output=True, timeout=timeout,
+                              creationflags=flags, startupinfo=startupinfo)
+
+    def _ensure_device(self):
+        """Pastikan target device ADB terhubung (auto-detect port / emulator)."""
+        res = self._raw_run("devices")
+        lines = [line.strip().split()[0] for line in res.stdout.decode("utf-8", "replace").splitlines()[1:] if "\tdevice" in line]
+        if self.cfg.SERIAL in lines:
+            return
+        # Coba hubungkan port LDPlayer default (5555 / 5554)
+        for port in ("127.0.0.1:5555", "127.0.0.1:5554"):
+            self._raw_run("connect", port)
+        res = self._raw_run("devices")
+        lines = [line.strip().split()[0] for line in res.stdout.decode("utf-8", "replace").splitlines()[1:] if "\tdevice" in line]
+        if lines:
+            self.cfg.SERIAL = lines[0]
+            logging.info("[ADB] Device terhubung -> %s", self.cfg.SERIAL)
 
     def run(self, *args, timeout=25):
         flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
@@ -183,9 +209,16 @@ class Adb:
         if sys.platform == "win32":
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        return subprocess.run([self.cfg.ADB, "-s", self.cfg.SERIAL, *args],
-                              capture_output=True, timeout=timeout,
-                              creationflags=flags, startupinfo=startupinfo)
+        r = subprocess.run([self.cfg.ADB, "-s", self.cfg.SERIAL, *args],
+                           capture_output=True, timeout=timeout,
+                           creationflags=flags, startupinfo=startupinfo)
+        # Jika device disconnect saat runtime, coba reconnect sekali
+        if r.returncode != 0 and b"device" in r.stderr and (b"not found" in r.stderr or b"offline" in r.stderr):
+            self._ensure_device()
+            r = subprocess.run([self.cfg.ADB, "-s", self.cfg.SERIAL, *args],
+                               capture_output=True, timeout=timeout,
+                               creationflags=flags, startupinfo=startupinfo)
+        return r
 
     def shell(self, cmd, timeout=25):
         return self.run("shell", cmd, timeout=timeout).stdout.decode("utf-8", "replace")
@@ -200,6 +233,12 @@ class Adb:
         for _ in range(3):
             try:
                 r = self.run("exec-out", "screencap -p")
+                if not r.stdout:
+                    err = r.stderr.decode("utf-8", "replace").strip()
+                    logging.warning("screenshot stdout kosong: %s", err)
+                    self._ensure_device()
+                    time.sleep(0.5)
+                    continue
                 img = cv2.imdecode(np.frombuffer(r.stdout, np.uint8), cv2.IMREAD_COLOR)
                 if img is not None:
                     return img
