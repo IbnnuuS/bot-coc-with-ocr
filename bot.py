@@ -149,10 +149,10 @@ class Config:
     # --- Model Penyerangan Rata Sisi & Smart Attack ---
     ATTACK_STRATEGY: str = "SMART"  # "SMART", "KIRI_ATAS", "KANAN_ATAS", "KIRI_BAWAH", "KANAN_BAWAH", "FOUR_SIDES"
     ATTACK_LINES = {
-        "KIRI_ATAS":   ((180, 360), (320, 220)),   # Pesisir barat laut luar
-        "KANAN_ATAS":  ((1600, 220), (1740, 360)), # Rumput timur laut luar
-        "KIRI_BAWAH":  ((120, 420), (130, 620)),   # Pantai berbatu barat daya (100% legal)
-        "KANAN_BAWAH": ((1780, 420), (1780, 620)), # Tepi tenggara luar
+        "KIRI_ATAS":   ((200, 340), (340, 210)),   # Pesisir barat laut luar
+        "KANAN_ATAS":  ((1620, 240), (1750, 360)), # Rumput timur laut luar
+        "KIRI_BAWAH":  ((110, 430), (120, 630)),   # Pantai barat daya luar
+        "KANAN_BAWAH": ((1760, 430), (1760, 630)), # Tepi tenggara luar
     }
     DEPLOY_POINT = (140, 520)       # fallback titik pantai
     DEPLOY_SPREAD = (15, 25)
@@ -765,18 +765,17 @@ class Bot:
                         self.adb.tap(pt[0], pt[1])
                         time.sleep(0.10)
                 elif utype == "siege":
-                    # Siege Machine (Wall Wrecker): tap 4x agar pasti turun menembus batas merah
-                    cx = (p1[0] + p2[0]) // 2
-                    cy = (p1[1] + p2[1]) // 2
-                    for _ in range(4):
-                        jx, jy = int(np.random.randint(-10, 10)), int(np.random.randint(-10, 10))
-                        self.adb.tap(cx + jx, cy + jy)
-                        time.sleep(0.12)
+                    # Siege Machine: sebar tap di 3 titik sepanjang perimeter agar lolos dari red area
+                    pts = get_line_points(p1, p2, 3)
+                    for pt in pts:
+                        for _ in range(2):
+                            self.adb.tap(pt[0] + int(np.random.randint(-6, 6)), pt[1] + int(np.random.randint(-6, 6)))
+                            time.sleep(0.12)
                 else:
-                    cx = (p1[0] + p2[0]) // 2 + int(np.random.randint(-10, 10))
-                    cy = (p1[1] + p2[1]) // 2 + int(np.random.randint(-10, 10))
-                    for _ in range(max(2, taps)):
-                        self.adb.tap(cx, cy)
+                    # Hero: sebar tap di 3 titik garis agar tidak macet di 1 titik red area
+                    pts = get_line_points(p1, p2, 3)
+                    for pt in pts:
+                        self.adb.tap(pt[0] + int(np.random.randint(-6, 6)), pt[1] + int(np.random.randint(-6, 6)))
                         time.sleep(0.12)
 
             time.sleep(0.15)
