@@ -2,7 +2,7 @@
 
 Tap dikirim lewat `input touchscreen tap` (terbukti diterima CoC).
 Filter: Gold >= 900k ATAU Elixir >= 900k (Config.ANY_TARGET).
-Loot cocok -> deploy 6 unit + 11 petir ke core + ulti hero (+30s, +62s).
+Loot cocok -> deploy 6 unit + 11 petir ke core + ulti hero (+45s).
 
   python bot.py --state       # baca state + loot sekali (read-only)
   python bot.py --calibrate   # simpan debug/calibrate.png beranotasi
@@ -142,7 +142,7 @@ class Config:
         "lightning": (1126, 975),
     }
     HERO_CARDS = [(529, 975), (675, 975), (820, 975), (950, 975)]   # fallback hero cards
-    ABILITY_DELAYS = (30, 62)       # detik setelah deploy; ronde 2 utk BK/AQ (2x pakai)
+    ABILITY_DELAYS = (45,)          # detik setelah deploy untuk ulti hero
     # kuadran core base (base selalu kira-kira di tengah layar saat scout)
     LIGHTNING_SPOTS = [(780, 390), (1090, 390), (780, 650), (1090, 650)]
 
@@ -826,17 +826,17 @@ class Bot:
                 dedup_slots.append(s)
         hero_slots = dedup_slots or Config.HERO_CARDS
 
-        for i, delay in enumerate(Config.ABILITY_DELAYS):
-            time.sleep(max(0.0, delay - (Config.ABILITY_DELAYS[i - 1] if i else 0)))
+        for delay in Config.ABILITY_DELAYS:
+            time.sleep(delay)
             img = self.snap()
             # Cek blob merah End Battle dulu (kebal naga/petir yang nutup teks atas)
             if img is None or not (end_button_visible(img) or battle_running(img)):
-                logging.info("battle selesai sebelum ronde %d, ulti dihentikan", i + 1)
+                logging.info("battle selesai sebelum ulti hero, dibatalkan")
                 return
             for x, y in hero_slots:
                 self.adb.tap(x + np.random.randint(-3, 3), y + np.random.randint(-3, 3))
                 time.sleep(0.25)
-            logging.info("ulti hero ronde %d (+%ds, %d hero)", i + 1, delay, len(hero_slots))
+            logging.info("ulti hero (+%ds, %d hero)", delay, len(hero_slots))
             self.check_speed_up(img)
 
     def wait_battle_end(self, battle_t0=None):
@@ -979,8 +979,8 @@ class Bot:
                     time.sleep(3)
                     self.deploy(card_map, chosen_side)
 
-                # 3. Ulti hero
-                self.cast_hero_abilities(card_map)      # ulti hero, ronde +30s & +62s
+                # 3. Ulti hero (+45s)
+                self.cast_hero_abilities(card_map)
                 time.sleep(2)
                 self.wait_battle_end(t_deploy)
             else:
