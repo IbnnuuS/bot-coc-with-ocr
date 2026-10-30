@@ -112,7 +112,7 @@ class Config:
 
     # --- Susunan Pasukan Dinamis (Template Matching bar y=945..980) ---
     UNIT_TPL_DIR = asset_path("templates", "units")
-    UNIT_THRESHOLD = 0.65
+    UNIT_THRESHOLD = 0.62
     AD_TPL_DIR = asset_path("templates", "ad")
     AD_THRESHOLD = 0.80
     STORAGE_TPL_DIR = asset_path("templates", "storages")
@@ -132,16 +132,16 @@ class Config:
     TOTAL_LIGHTNING = 11
     # Koordinat cadangan jika template belum dicrop / tidak match
     FALLBACK_SLOTS = {
-        "edrag": (206, 980),
-        "wall_wrecker": (378, 980),
-        "minion_prince": (529, 980),
-        "king": (529, 980),
-        "queen": (674, 980),
-        "warden": (820, 980),
-        "rc": (958, 980),
-        "lightning": (968, 980),
+        "edrag": (207, 975),
+        "wall_wrecker": (377, 975),
+        "minion_prince": (529, 975),
+        "king": (529, 975),
+        "queen": (675, 975),
+        "warden": (820, 975),
+        "rc": (950, 975),
+        "lightning": (1126, 975),
     }
-    HERO_CARDS = [(529, 980), (674, 980), (820, 980), (958, 980)]   # fallback hero cards
+    HERO_CARDS = [(529, 975), (675, 975), (820, 975), (950, 975)]   # fallback hero cards
     ABILITY_DELAYS = (30, 62)       # detik setelah deploy; ronde 2 utk BK/AQ (2x pakai)
     # kuadran core base (base selalu kira-kira di tengah layar saat scout)
     LIGHTNING_SPOTS = [(780, 390), (1090, 390), (780, 650), (1090, 650)]
@@ -398,10 +398,20 @@ def loot_enough(loot):
     return g >= tg or e >= te
 
 
+def get_unit_center_crop(tpl):
+    """Crop inti kartu (wajah/artwork 60x60) untuk membuang teks level, border, dan badge jumlah."""
+    th, tw = tpl.shape[:2]
+    if th > 70 or tw > 70:
+        cy = int(th * 0.45)
+        cx = tw // 2
+        return tpl[max(0, cy - 30):min(th, cy + 30), max(0, cx - 30):min(tw, cx + 30)]
+    return tpl
+
+
 def detect_army_cards(img, tpl_dir=Config.UNIT_TPL_DIR, thresh=Config.UNIT_THRESHOLD):
     """Deteksi posisi kartu unit di bar pasukan (y=850..1075, x=50..1870).
     Return dict: {name: (cx, cy, score)}."""
-    if not os.path.isdir(tpl_dir):
+    if not os.path.isdir(tpl_dir) or img is None:
         return {}
     bar = img[850:1075, 50:1870]
     gray = cv2.cvtColor(bar, cv2.COLOR_BGR2GRAY)
@@ -411,31 +421,18 @@ def detect_army_cards(img, tpl_dir=Config.UNIT_TPL_DIR, thresh=Config.UNIT_THRES
     for p in glob.glob(os.path.join(tpl_dir, "*.png")):
         name = os.path.splitext(os.path.basename(p))[0]
         tpl = cv2.imread(p, cv2.IMREAD_GRAYSCALE)
-        if tpl is None or gray.shape[0] < tpl.shape[0] or gray.shape[1] < tpl.shape[1]:
+        if tpl is None:
+            continue
+        tpl_crop = get_unit_center_crop(tpl)
+        if gray.shape[0] < tpl_crop.shape[0] or gray.shape[1] < tpl_crop.shape[1]:
             continue
 
-        scales = [1.0] if tpl.shape[0] < 100 else [1.0, 0.85, 0.75]
-        best_v, best_l, best_sz = 0.0, (0, 0), tpl.shape
-        for s in scales:
-            if s == 1.0:
-                r_tpl = tpl
-            else:
-                w = int(tpl.shape[1] * s)
-                h = int(tpl.shape[0] * s)
-                r_tpl = cv2.resize(tpl, (w, h), interpolation=cv2.INTER_AREA)
-            if r_tpl.shape[0] >= gray.shape[0] or r_tpl.shape[1] >= gray.shape[1]:
-                continue
-            res = cv2.matchTemplate(gray, r_tpl, cv2.TM_CCOEFF_NORMED)
-            _, max_v, _, max_l = cv2.minMaxLoc(res)
-            if max_v > best_v:
-                best_v = float(max_v)
-                best_l = max_l
-                best_sz = r_tpl.shape
-
-        if best_v >= thresh:
-            cx = int(best_l[0] + 50 + best_sz[1] // 2)
-            cy = int(best_l[1] + 850 + best_sz[0] // 2)
-            detected[name] = (cx, cy, best_v)
+        res = cv2.matchTemplate(gray, tpl_crop, cv2.TM_CCOEFF_NORMED)
+        _, max_v, _, max_l = cv2.minMaxLoc(res)
+        if max_v >= thresh:
+            cx = int(max_l[0] + 50 + tpl_crop.shape[1] // 2)
+            cy = int(max_l[1] + 850 + tpl_crop.shape[0] // 2)
+            detected[name] = (cx, cy, float(max_v))
     return detected
 
 
@@ -688,7 +685,12 @@ class Bot:
         if Config.SPELL_UNIT in card_map:
             sx, sy = card_map[Config.SPELL_UNIT][0], card_map[Config.SPELL_UNIT][1]
         else:
-            sx, sy = Config.FALLBACK_SLOTS.get(Config.SPELL_UNIT, (1127, 945))
+            # Fallback dinamis: kartu petir selalu di sisi kanan (> 1000 px)
+            spells = [v for k, v in card_map.items() if v[0] > 1000]
+            if spells:
+                sx, sy = max(spells, key=lambda v: v[0])[:2]
+            else:
+                sx, sy = Config.FALLBACK_SLOTS.get(Config.SPELL_UNIT, (1126, 975))
 
         spots = []
         if img is not None:
