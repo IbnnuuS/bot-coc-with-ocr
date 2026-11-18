@@ -87,19 +87,19 @@ class Config:
 
     # --- template state (1080p) ---
     TPL = {
-        "HOME":  (asset_path("templates", "btn_battle.png"), (20, 880, 225, 1064)),
-        "MENU":  (asset_path("templates", "btn_find.png"),   (95, 710, 565, 890)),
+        "HOME":  (asset_path("templates", "btn_battle.png"), (0, 850, 270, 1080)),
+        "MENU":  (asset_path("templates", "btn_find.png"),   (60, 700, 560, 900)),
         "ARMY":  (asset_path("templates", "btn_attack.png"), (1500, 915, 1890, 1010)),
     }
     TPL_THRESHOLD = 0.80
 
     # --- koordinat tetap (1080p, terukur) ---
     # slot pasukan (pusat kartu, bar bawah; terukur live)
-    BTN_BATTLE   = (122, 972)    # tombol "Battle" di home
-    BTN_FIND     = (330, 790)    # "Find a Match"
+    BTN_BATTLE   = (127, 959)    # tombol "Battle" di home (tengah blob gold 29..225 / 860..1058)
+    BTN_FIND     = (295, 803)    # "Find a Match 1600" kartu kiri (78..512 / 736..870)
     BTN_ATTACK   = (1696, 964)   # "Attack!" hijau (ARMY panel)
     BTN_NEXT     = (1750, 775)   # Next: pusat tombol terukur (template btn_next center 1749,769)
-    BTN_END      = (137, 800)    # "End Battle" merah: pusat blob terukur (28..247, 774..842)
+    BTN_END      = (137, 827)    # "End Battle" merah: pusat blob terukur (28..246, 790..864)
     BTN_RETURN   = (961, 932)    # "Return Home" di layar hasil
     AUTO_SPEED_UP: bool = True
     BTN_SPEED_TPL = asset_path("templates", "btn_speed_1x.png")
@@ -120,9 +120,9 @@ class Config:
     # Urutan deploy: (nama_unit, jumlah_tap, jenis)
     # jenis: "troop", "siege", "hero", "spell"
     ARMY_ORDER = [
-        ("edrag", 10, "troop"),
+        ("dragon", 10, "troop"),
+        ("balloon", 1, "troop"),
         ("wall_wrecker", 1, "siege"),
-        ("minion_prince", 1, "hero"),
         ("king", 1, "hero"),
         ("queen", 1, "hero"),
         ("warden", 1, "hero"),
@@ -130,18 +130,20 @@ class Config:
     ]
     SPELL_UNIT = "lightning"
     TOTAL_LIGHTNING = 11
+
     # Koordinat cadangan jika template belum dicrop / tidak match
+    # (pusat kartu bar bawah 1080p: 121x135 px, pitch 150 px dari x=196)
     FALLBACK_SLOTS = {
-        "edrag": (207, 975),
-        "wall_wrecker": (377, 975),
-        "minion_prince": (529, 975),
-        "king": (529, 975),
-        "queen": (675, 975),
-        "warden": (820, 975),
-        "rc": (950, 975),
-        "lightning": (1126, 975),
+        "dragon": (196, 967),
+        "balloon": (346, 967),
+        "wall_wrecker": (496, 967),
+        "king": (646, 967),
+        "queen": (796, 967),
+        "warden": (946, 967),
+        "rc": (1096, 967),
+        "lightning": (1246, 967),
     }
-    HERO_CARDS = [(529, 975), (675, 975), (820, 975), (950, 975)]   # fallback hero cards
+    HERO_CARDS = [(646, 967), (796, 967), (946, 967), (1096, 967)]   # fallback hero cards
     ABILITY_DELAYS = (45,)          # detik setelah deploy untuk ulti hero
     # kuadran core base (base selalu kira-kira di tengah layar saat scout)
     LIGHTNING_SPOTS = [(780, 390), (1090, 390), (780, 650), (1090, 650)]
@@ -476,7 +478,7 @@ def detect_army_cards(img, tpl_dir=Config.UNIT_TPL_DIR, thresh=Config.UNIT_THRES
 
 
 def find_air_defenses(img, tpl_dir=Config.AD_TPL_DIR, threshold=Config.AD_THRESHOLD):
-    """Deteksi bangunan Air Defense lawan via multi-scale masked template matching (Level 7-13)."""
+    """Deteksi bangunan Air Defense lawan via multi-scale masked template matching (Level 7-16)."""
     if not os.path.isdir(tpl_dir):
         return []
     x_off, y_off = 280, 130
@@ -729,7 +731,8 @@ class Bot:
             if spells:
                 sx, sy = max(spells, key=lambda v: v[0])[:2]
             else:
-                sx, sy = Config.FALLBACK_SLOTS.get(Config.SPELL_UNIT, (1126, 975))
+                fb = Config.FALLBACK_SLOTS
+                sx, sy = fb.get(Config.SPELL_UNIT, (1126, 975))
 
         spots = []
         if img is not None:
@@ -759,14 +762,18 @@ class Bot:
         if side not in Config.ATTACK_LINES and side != "FOUR_SIDES":
             side = "KIRI_BAWAH"
 
-        logging.info("deploy strategi: %s (sisi aktif: %s)", strat, side)
+        fallback_slots = Config.FALLBACK_SLOTS
+
+        army_order = list(Config.ARMY_ORDER)
+
+        logging.info("deploy strategi: %s (sisi utama: %s)", strat, side)
 
         deployed_slots = set()
-        for name, taps, utype in Config.ARMY_ORDER:
+        for name, taps, utype in army_order:
             if name in card_map:
                 sx, sy = card_map[name][0], card_map[name][1]
-            elif name in Config.FALLBACK_SLOTS:
-                sx, sy = Config.FALLBACK_SLOTS[name]
+            elif name in fallback_slots:
+                sx, sy = fallback_slots[name]
                 # Jika ada unit lain yang sudah terdeteksi di slot horizontal ini, lewati
                 if any(other != name and other in card_map and abs(card_map[other][0] - sx) < 40 for other in card_map):
                     logging.info("kartu '%s' slot (%d, %d) diisi unit terdeteksi lain, skip", name, sx, sy)
@@ -784,7 +791,10 @@ class Bot:
             self.adb.tap(sx + np.random.randint(-4, 4), sy + np.random.randint(-4, 4))
             time.sleep(0.30)
 
-            if side == "FOUR_SIDES":
+            active_side = side
+            logging.info("deploy unit '%s' (%d taps, jenis: %s) di sisi: %s", name, taps, utype, active_side)
+
+            if active_side == "FOUR_SIDES":
                 all_sides = list(Config.ATTACK_LINES.keys())
                 total_taps = taps + 3 if utype == "troop" else max(3, taps)
                 for tap_idx in range(total_taps):
@@ -796,9 +806,9 @@ class Bot:
                     time.sleep(0.10)
             else:
                 # 1 Sisi: Berbaris RATA sepanjang garis perimeter
-                p1, p2 = Config.ATTACK_LINES[side]
+                p1, p2 = Config.ATTACK_LINES[active_side]
                 if utype == "troop":
-                    # Taps ekstra (taps + 4) agar seluruh naga keluar rata tanpa tertahan
+                    # Taps ekstra (taps + 4) agar seluruh unit keluar rata tanpa tertahan
                     points = get_line_points(p1, p2, taps + 4)
                     for pt in points:
                         self.adb.tap(pt[0], pt[1])
@@ -847,13 +857,14 @@ class Bot:
         BK/AQ yang ability-nya bisa 2x.
         """
         card_map = card_map or {}
+        fb = Config.FALLBACK_SLOTS
         hero_slots = []
         for name, _, utype in Config.ARMY_ORDER:
             if utype == "hero":
                 if name in card_map:
                     hero_slots.append((card_map[name][0], card_map[name][1]))
-                elif name in Config.FALLBACK_SLOTS:
-                    sx, sy = Config.FALLBACK_SLOTS[name]
+                elif name in fb:
+                    sx, sy = fb[name]
                     if not any(other != name and other in card_map and abs(card_map[other][0] - sx) < 40 for other in card_map):
                         hero_slots.append((sx, sy))
 
