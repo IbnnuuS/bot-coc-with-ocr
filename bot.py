@@ -144,7 +144,7 @@ class Config:
         "lightning": (1246, 967),
     }
     HERO_CARDS = [(646, 967), (796, 967), (946, 967), (1096, 967)]   # fallback hero cards
-    ABILITY_DELAYS = (45,)          # detik setelah deploy untuk ulti hero
+    ABILITY_DELAYS = (8,)          # detik setelah deploy untuk ulti hero (battle 4x jauh lebih cepat)
     # kuadran core base (base selalu kira-kira di tengah layar saat scout)
     LIGHTNING_SPOTS = [(780, 390), (1090, 390), (780, 650), (1090, 650)]
 
@@ -516,16 +516,20 @@ def find_air_defenses(img, tpl_dir=Config.AD_TPL_DIR, threshold=Config.AD_THRESH
     return [(cx, cy) for _, cx, cy in kept]
 
 
-def find_speed_button(img, thresh=0.80):
-    """Cari tombol percepat battle (1x / hijau) di paruh bawah layar."""
+def find_speed_button(img, thresh=0.75):
+    """Cari tombol Fast Forward "1x" (muncul setelah semua troops diturunkan).
+
+    Posisi: sisi kanan layar, ~y 556-676 (di atas bar deploy).
+    """
     tpl_p = Config.BTN_SPEED_TPL
     if not os.path.exists(tpl_p):
         return None
     tpl = cv2.imread(tpl_p)
     if tpl is None:
         return None
-    roi = img[600:1080, :]
-    for s in [1.0, 1.4, 1.8]:
+    roi_y, roi_x = 380, 1200
+    roi = img[roi_y:1080, roi_x:]
+    for s in [1.0, 1.2, 0.85]:
         w = int(tpl.shape[1] * s)
         h = int(tpl.shape[0] * s)
         if w >= roi.shape[1] or h >= roi.shape[0]:
@@ -534,8 +538,8 @@ def find_speed_button(img, thresh=0.80):
         res = cv2.matchTemplate(roi, r_tpl, cv2.TM_CCOEFF_NORMED)
         _, max_v, _, max_l = cv2.minMaxLoc(res)
         if max_v >= thresh:
-            cx = int(max_l[0] + w // 2)
-            cy = int(max_l[1] + 600 + h // 2)
+            cx = int(max_l[0] + roi_x + w // 2)
+            cy = int(max_l[1] + roi_y + h // 2)
             return cx, cy, float(max_v)
     return None
 
@@ -833,8 +837,14 @@ class Bot:
         self.check_speed_up()
 
     def check_speed_up(self, img=None):
-        """Otomatis tap tombol percepat battle (1x -> 4x) jika terdeteksi."""
+        """Tap tombol Fast Forward "1x" sekali per battle -> battle jadi 4x.
+
+        Tombol muncul di sisi kanan layar setelah semua troops diturunkan;
+        sekali tap = 4x, tap lagi = balik 1x. Jadi cukup 1 tap per battle.
+        """
         if not getattr(Config, "AUTO_SPEED_UP", True):
+            return False
+        if getattr(self, "_speed_used", False):
             return False
         img = img if img is not None else self.snap()
         if img is None:
@@ -842,10 +852,10 @@ class Bot:
         btn = find_speed_button(img)
         if btn:
             cx, cy, sc = btn
-            logging.info("[PERCEPAT] Tombol 1x terdeteksi di (%d, %d) [skor %.2f], tap 2x ke 4x", cx, cy, sc)
+            logging.info("[PERCEPAT] tombol 1x terdeteksi di (%d, %d) [skor %.2f], tap 1x -> 4x", cx, cy, sc)
             self.adb.tap(cx, cy)
-            time.sleep(0.18)
-            self.adb.tap(cx, cy)
+            self._speed_used = True
+            time.sleep(0.3)
             return True
         return False
 
@@ -1001,6 +1011,7 @@ class Bot:
             if enough:
                 logging.info("Loot target terpenuhi! Langsung serang!")
                 self.total_attacks += 1
+                self._speed_used = False      # reset: tombol 1x baru muncul di battle ini
                 self.last_loot = loot
                 t_deploy = time.time()
                 card_map = detect_army_cards(img)
