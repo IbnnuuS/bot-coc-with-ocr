@@ -86,8 +86,11 @@ class Config:
     BTN_SURRENDER_CONFIRM = (1090, 670)  # tombol Okay hijau konfirmasi surrender
 
     # --- template state (1080p) ---
+    # Satu state boleh punya beberapa varian template (ganti tampilan UI event /
+    # Star Bonus penuh). Deteksi pakai skor tertinggi; tambah varian, jangan ganti.
     TPL = {
-        "HOME":  (asset_path("templates", "btn_battle.png"), (0, 850, 270, 1080)),
+        "HOME":  ([asset_path("templates", "btn_battle.png"),
+                   asset_path("templates", "btn_battle_alt1.png")], (0, 850, 270, 1080)),
         "MENU":  (asset_path("templates", "btn_find.png"),   (60, 700, 560, 900)),
         "ARMY":  (asset_path("templates", "btn_attack.png"), (1500, 915, 1890, 1010)),
     }
@@ -404,9 +407,19 @@ def battle_running(img):
     return "ends" in top_text(img)
 
 
+def tpl_paths(p):
+    """Path template: string tunggal atau list varian (UI bisa ganti tampilan)."""
+    return (p,) if isinstance(p, str) else tuple(p)
+
+
+def state_score(img, paths, roi):
+    """Skor terbaik dari semua varian template sebuah state."""
+    return max(match_score(img, p, roi) for p in tpl_paths(paths))
+
+
 def detect_state(img):
-    for state, (path, roi) in Config.TPL.items():
-        if match_score(img, path, roi) >= Config.TPL_THRESHOLD:
+    for state, (paths, roi) in Config.TPL.items():
+        if state_score(img, paths, roi) >= Config.TPL_THRESHOLD:
             return state
     if end_button_visible(img):
         return "SCOUT"          # End Battle terlihat = sedang scouting/base musuh
@@ -1078,8 +1091,8 @@ class Bot:
         if img is None:
             return logging.error("screenshot gagal")
         vis = img.copy()
-        for state, (path, (x1, y1, x2, y2)) in Config.TPL.items():
-            s = match_score(img, path, (x1, y1, x2, y2))
+        for state, (paths, (x1, y1, x2, y2)) in Config.TPL.items():
+            s = state_score(img, paths, (x1, y1, x2, y2))
             cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 255), 2)
             cv2.putText(vis, f"{state} {s:.2f}", (x1, y1 - 6),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
@@ -1104,15 +1117,16 @@ class Bot:
 
 def selftest():
     """Vision check tanpa device: template harus match di posisinya sendiri."""
-    for state, (path, roi) in Config.TPL.items():
-        tpl = _tpl(path)
-        assert tpl is not None, f"template hilang: {path}"
-        canvas = np.full((Config.H, Config.W, 3), 30, np.uint8)
-        x, y = roi[0], roi[1]
-        canvas[y:y + tpl.shape[0], x:x + tpl.shape[1]] = cv2.cvtColor(tpl, cv2.COLOR_GRAY2BGR)
-        got = detect_state(canvas)
-        assert got == state, f"{state}: dapat {got}"
-        print(f"{state:6s} ok")
+    for state, (paths, roi) in Config.TPL.items():
+        for path in tpl_paths(paths):
+            tpl = _tpl(path)
+            assert tpl is not None, f"template hilang: {path}"
+            canvas = np.full((Config.H, Config.W, 3), 30, np.uint8)
+            x, y = roi[0], roi[1]
+            canvas[y:y + tpl.shape[0], x:x + tpl.shape[1]] = cv2.cvtColor(tpl, cv2.COLOR_GRAY2BGR)
+            got = detect_state(canvas)
+            assert got == state, f"{state}: dapat {got} ({os.path.basename(path)})"
+            print(f"{state:6s} ok  {os.path.basename(path)}")
 
     # test loot modes
     Config.LOOT_MODE = "GOLD_OR_ELIXIR"
