@@ -134,6 +134,10 @@ class Config:
     SPELL_UNIT = "lightning"
     TOTAL_LIGHTNING = 11
 
+    # --- Fitur Event (Mass M.O.M.M.As) ---
+    EVENT_MOMMA: bool = False
+    EVENT_MOMMA_TAPS: int = 25
+
     # Koordinat cadangan jika template belum dicrop / tidak match
     # (pusat kartu bar bawah 1080p: 121x135 px, pitch 150 px dari x=196)
     FALLBACK_SLOTS = {
@@ -145,6 +149,18 @@ class Config:
         "warden": (946, 967),
         "rc": (1096, 967),
         "lightning": (1246, 967),
+    }
+    # Koordinat cadangan saat Event MOMMA aktif (semua slot setelah slot-1 geser 1 kartu)
+    FALLBACK_SLOTS_EVENT = {
+        "dragon": (196, 967),
+        "momma": (346, 967),
+        "balloon": (496, 967),
+        "wall_wrecker": (646, 967),
+        "king": (796, 967),
+        "queen": (946, 967),
+        "warden": (1096, 967),
+        "rc": (1246, 967),
+        "lightning": (1396, 967),
     }
     HERO_CARDS = [(646, 967), (796, 967), (946, 967), (1096, 967)]   # fallback hero cards
     ABILITY_DELAYS = (8,)          # detik setelah deploy untuk ulti hero (battle 4x jauh lebih cepat)
@@ -748,8 +764,8 @@ class Bot:
             if spells:
                 sx, sy = max(spells, key=lambda v: v[0])[:2]
             else:
-                fb = Config.FALLBACK_SLOTS
-                sx, sy = fb.get(Config.SPELL_UNIT, (1126, 975))
+                fb = Config.FALLBACK_SLOTS_EVENT if getattr(Config, "EVENT_MOMMA", False) else Config.FALLBACK_SLOTS
+                sx, sy = fb.get(Config.SPELL_UNIT, (1246, 967))
 
         spots = []
         if img is not None:
@@ -779,11 +795,25 @@ class Bot:
         if side not in Config.ATTACK_LINES and side != "FOUR_SIDES":
             side = "KIRI_BAWAH"
 
-        fallback_slots = Config.FALLBACK_SLOTS
+        mirror_map = {
+            "KIRI_ATAS": "KANAN_ATAS",
+            "KANAN_ATAS": "KIRI_ATAS",
+            "KIRI_BAWAH": "KANAN_BAWAH",
+            "KANAN_BAWAH": "KIRI_BAWAH",
+            "FOUR_SIDES": "FOUR_SIDES",
+        }
+        mirror_side = mirror_map.get(side, side)
+
+        is_event = getattr(Config, "EVENT_MOMMA", False)
+        fallback_slots = Config.FALLBACK_SLOTS_EVENT if is_event else Config.FALLBACK_SLOTS
 
         army_order = list(Config.ARMY_ORDER)
+        if is_event:
+            # Slot 2: momma 25 taps (event_troop mirror) disisipkan setelah slot 1
+            army_order.insert(1, ("momma", getattr(Config, "EVENT_MOMMA_TAPS", 25), "event_troop"))
 
-        logging.info("deploy strategi: %s (sisi utama: %s)", strat, side)
+        logging.info("deploy strategi: %s (sisi utama: %s, sisi mirror: %s, event_momma: %s)",
+                     strat, side, mirror_side, is_event)
 
         deployed_slots = set()
         for name, taps, utype in army_order:
@@ -808,28 +838,28 @@ class Bot:
             self.adb.tap(sx + np.random.randint(-4, 4), sy + np.random.randint(-4, 4))
             time.sleep(0.30)
 
-            active_side = side
+            active_side = mirror_side if utype == "event_troop" else side
             logging.info("deploy unit '%s' (%d taps, jenis: %s) di sisi: %s", name, taps, utype, active_side)
 
             if active_side == "FOUR_SIDES":
                 all_sides = list(Config.ATTACK_LINES.keys())
-                total_taps = taps + 3 if utype == "troop" else max(3, taps)
+                total_taps = taps + 3 if utype in ("troop", "event_troop") else max(3, taps)
                 for tap_idx in range(total_taps):
                     s_name = all_sides[tap_idx % len(all_sides)]
                     p1, p2 = Config.ATTACK_LINES[s_name]
                     pt = ((p1[0] + p2[0]) // 2 + int(np.random.randint(-15, 15)),
                           (p1[1] + p2[1]) // 2 + int(np.random.randint(-15, 15)))
                     self.adb.tap(pt[0], pt[1])
-                    time.sleep(0.10)
+                    time.sleep(0.08 if utype == "event_troop" else 0.10)
             else:
                 # 1 Sisi: Berbaris RATA sepanjang garis perimeter
                 p1, p2 = Config.ATTACK_LINES[active_side]
-                if utype == "troop":
+                if utype in ("troop", "event_troop"):
                     # Taps ekstra (taps + 4) agar seluruh unit keluar rata tanpa tertahan
                     points = get_line_points(p1, p2, taps + 4)
                     for pt in points:
                         self.adb.tap(pt[0], pt[1])
-                        time.sleep(0.10)
+                        time.sleep(0.08 if utype == "event_troop" else 0.10)
                 elif utype == "siege":
                     # Siege Machine: sebar tap di 3 titik sepanjang perimeter agar lolos dari red area
                     pts = get_line_points(p1, p2, 3)
@@ -880,7 +910,7 @@ class Bot:
         BK/AQ yang ability-nya bisa 2x.
         """
         card_map = card_map or {}
-        fb = Config.FALLBACK_SLOTS
+        fb = Config.FALLBACK_SLOTS_EVENT if getattr(Config, "EVENT_MOMMA", False) else Config.FALLBACK_SLOTS
         hero_slots = []
         for name, _, utype in Config.ARMY_ORDER:
             if utype == "hero":

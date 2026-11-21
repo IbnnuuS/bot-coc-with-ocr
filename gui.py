@@ -177,7 +177,13 @@ class App(ctk.CTk):
                                            command=self._on_switch_change)
         if getattr(Config, "AUTO_SPEED_UP", True):
             self.sw_auto_speed.select()
-        self.sw_auto_speed.grid(row=4, column=0, padx=12, pady=(4, 12), sticky="w")
+        self.sw_auto_speed.grid(row=4, column=0, padx=12, pady=4, sticky="w")
+
+        self.sw_event_momma = ctk.CTkSwitch(card_strat, text="Event Mass M.O.M.M.As (Mirror)",
+                                            command=self._on_switch_change)
+        if getattr(Config, "EVENT_MOMMA", False):
+            self.sw_event_momma.select()
+        self.sw_event_momma.grid(row=5, column=0, padx=12, pady=(4, 12), sticky="w")
 
         # ================= RIGHT DASHBOARD & LOGS =================
         self.main_frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
@@ -292,6 +298,7 @@ class App(ctk.CTk):
 
         Config.END_IF_LOOT_EMPTY = bool(self.sw_auto_end.get())
         Config.AUTO_SPEED_UP = bool(self.sw_auto_speed.get())
+        Config.EVENT_MOMMA = bool(self.sw_event_momma.get())
 
     def _on_opt_change(self, choice):
         self._sync_config()
@@ -329,8 +336,8 @@ class App(ctk.CTk):
 
         self.bot_thread = threading.Thread(target=self._run_loop, daemon=True)
         self.bot_thread.start()
-        logging.info("Bot dimulai. Target: Gold >= %s, Elixir >= %s [%s] | Strategi: %s",
-                     f"{Config.TARGETS['Gold']:,}", f"{Config.TARGETS['Elixir']:,}", Config.LOOT_MODE, Config.ATTACK_STRATEGY)
+        logging.info("Bot dimulai. Target: Gold >= %s, Elixir >= %s [%s] | Strategi: %s | Event M.O.M.M.A: %s",
+                     f"{Config.TARGETS['Gold']:,}", f"{Config.TARGETS['Elixir']:,}", Config.LOOT_MODE, Config.ATTACK_STRATEGY, Config.EVENT_MOMMA)
 
     def stop_bot(self):
         self.bot.stop()
